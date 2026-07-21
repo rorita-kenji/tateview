@@ -229,6 +229,25 @@ test('warnings: 三点リーダ／ダッシュの奇数（単体も拾う）', (
   assert.ok(codes('あ―い').includes('odd-leader-dash'));
   assert.ok(!codes('あ――い').includes('odd-leader-dash'));
 });
+test('warnings: 伸ばし棒ーの連続', () => {
+  assert.ok(codes('　ああーー').includes('repeated-chouon'));
+  assert.ok(codes('　うーーーっ').includes('repeated-chouon'));
+  assert.ok(!codes('　ああー').includes('repeated-chouon'));
+  const item = detectWarnings('xーーy').items.find((i) => i.code === 'repeated-chouon');
+  assert.ok(item);
+  assert.deepEqual(item.range, { start: 1, end: 3 });
+  assert.equal(item.label, '伸ばし棒の連続');
+});
+test('warnings: 単独のカタカナ「ニ」', () => {
+  assert.ok(codes('　ニ人が歩いた').includes('lonely-katakana-ni'));
+  assert.ok(codes('　あとニつ').includes('lonely-katakana-ni'));
+  // カタカナ語の一部は除外
+  assert.ok(!codes('　ソニーの製品').includes('lonely-katakana-ni'));
+  assert.ok(!codes('　ユニット').includes('lonely-katakana-ni'));
+  assert.ok(!codes('　コンビニ').includes('lonely-katakana-ni'));
+  // 漢字の二は対象外
+  assert.ok(!codes('　二人が歩いた').includes('lonely-katakana-ni'));
+});
 test('warnings: 半角はラン単位で1件、ルビ内は除外', () => {
   const one = detectWarnings('ABCあ').items.filter((i) => i.code === 'halfwidth');
   assert.equal(one.length, 1);
@@ -289,6 +308,32 @@ test('warnings: ルビ構文エラー', () => {
   assert.ok(codes('漢字《ルビ').includes('ruby-syntax-error'));
   assert.ok(codes('｜漢字です').includes('ruby-syntax-error'));
   assert.ok(!codes('漢字《かんじ》').includes('ruby-syntax-error'));
+});
+test('warnings: 閉じていない括弧／開きのない閉じ括弧', () => {
+  // 未閉じ
+  const open = detectWarnings('　「こんにちは').items.filter((i) => i.code === 'unclosed-bracket');
+  assert.equal(open.length, 1);
+  assert.equal(open[0].label, '閉じていない括弧　「');
+  assert.deepEqual(open[0].range, { start: 1, end: 2 });
+
+  // 開きなし閉じ
+  const close = detectWarnings('　こんにちは」').items.filter((i) => i.code === 'unmatched-close-bracket');
+  assert.equal(close.length, 1);
+  assert.equal(close[0].label, '開きのない閉じ括弧　」');
+
+  // 正常
+  assert.ok(!codes('　「こんにちは」').includes('unclosed-bracket'));
+  assert.ok(!codes('　「こんにちは」').includes('unmatched-close-bracket'));
+  assert.ok(!codes('　（注）と『書名』').includes('unclosed-bracket'));
+
+  // ネスト
+  assert.ok(!codes('　「彼は『いいえ』と言った」').includes('unclosed-bracket'));
+  assert.ok(codes('　「彼は『いいえと言った」').includes('unclosed-bracket'));
+
+  // ルビの《》は括弧警告にしない
+  const ruby = codes('　東京《とうきょう》です');
+  assert.ok(!ruby.includes('unclosed-bracket'));
+  assert.ok(!ruby.includes('unmatched-close-bracket'));
 });
 test('warnings: 上限と total', () => {
   const text = 'a\n'.repeat(2000); // 半角aが2000ラン

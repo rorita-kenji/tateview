@@ -825,6 +825,10 @@ const WARNING_LABELS = {
   'fullspace-only-line': '全角空白のみの行',
   'consecutive-blank': '連続空行',
   'ruby-syntax-error': 'ルビ構文エラー',
+  'unclosed-bracket': '閉じていない括弧',
+  'unmatched-close-bracket': '開きのない閉じ括弧',
+  'repeated-chouon': '伸ばし棒の連続',
+  'lonely-katakana-ni': '単独のカタカナ「ニ」（漢字「二」の誤りの可能性）',
 };
 
 const SEVERITY = {
@@ -841,6 +845,10 @@ const SEVERITY = {
   'fullspace-only-line': 'warning',
   'consecutive-blank': 'info',
   'ruby-syntax-error': 'error',
+  'unclosed-bracket': 'warning',
+  'unmatched-close-bracket': 'warning',
+  'repeated-chouon': 'warning',
+  'lonely-katakana-ni': 'warning',
 };
 
 const DEFAULT_LIMIT = 1000;
@@ -932,6 +940,13 @@ function detectWarnings(text, opt = {}) {
   scan(text, /[！？](?=[^\s　！？」』）】〉])/g, (m) => on('no-space-after-bang') && add('no-space-after-bang', m.index, m.index + 1));
   scan(text, /…+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
   scan(text, /―+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
+  // 伸ばし棒「ー」(U+30FC) が2つ以上連続
+  scan(text, /ー{2,}/g, (m) => on('repeated-chouon') && add('repeated-chouon', m.index, m.index + m[0].length));
+  // 単独のカタカナ「ニ」（前後がカタカナ語を構成する文字でない）→ 漢字「二」誤変換が多い
+  // カタカナ語の一部: ァ-ヶ・ー・゛゜・ヽヾ
+  scan(text, /(?<![ァ-ヶー゛゜ヽヾ])ニ(?![ァ-ヶー゛゜ヽヾ])/g, (m) =>
+    on('lonely-katakana-ni') && add('lonely-katakana-ni', m.index, m.index + 1)
+  );
   scan(text, /\t/g, (m) => {
     // 行末TABは trailing-space に任せる（二重検出を避ける）
     if (on('tab') && !inTrailing(m.index)) add('tab', m.index, m.index + 1);
@@ -993,6 +1008,15 @@ function detectWarnings(text, opt = {}) {
     scan(text, /｜(?![^《\n]*《)/g, (m) => add('ruby-syntax-error', m.index, m.index + 1));
   }
 
+  // 括弧の対応（閉じていない開き／開きのない閉じ）
+  // 《》はルビ記法のため対象外。ルビ範囲内の括弧もスキップ。
+  if (on('unclosed-bracket') || on('unmatched-close-bracket')) {
+    detectBracketBalance(text, rubyRanges, (code, start, end, mark) => {
+      if (!on(code)) return;
+      add(code, start, end, `${WARNING_LABELS[code]}　${mark}`);
+    });
+  }
+
   items.sort((a, b) => {
     const ds = a.range.start - b.range.start;
     if (ds) return ds;
@@ -1009,6 +1033,8 @@ function detectWarnings(text, opt = {}) {
 function warnCodeOrder(code) {
   const order = {
     'ruby-syntax-error': 10,
+    'unmatched-close-bracket': 12,
+    'unclosed-bracket': 14,
     tab: 20,
     'halfwidth-space': 30,
     halfwidth: 40,
@@ -1016,6 +1042,8 @@ function warnCodeOrder(code) {
     'period-before-bracket': 60,
     'no-space-after-bang': 70,
     'odd-leader-dash': 80,
+    'repeated-chouon': 85,
+    'lonely-katakana-ni': 87,
     'dialog-indent': 90,
     'indent-missing': 100,
     'fullspace-only-line': 110,
@@ -1023,6 +1051,72 @@ function warnCodeOrder(code) {
     'ruby-off': 130,
   };
   return order[code] ?? 500;
+}
+
+/**
+ * 括弧対応チェック。
+ * @param {string} text
+ * @param {{start:number,end:number}[]} rubyRanges
+ * @param {(code:string, start:number, end:number, mark:string) => void} emit
+ */
+function detectBracketBalance(text, rubyRanges, emit) {
+  /** @type {Record<string,string>} */
+  const openToClose = {
+    '「': '」',
+    '『': '』',
+    '（': '）',
+    '【': '】',
+    '〔': '〕',
+    '［': '］',
+    '〈': '〉',
+    '(': ')',
+    '[': ']',
+    '{': '}',
+  };
+  /** @type {Record<string,string>} */
+  const closeToOpen = {};
+  for (const [o, c] of Object.entries(openToClose)) closeToOpen[c] = o;
+
+  /** @type {{ open:string, close:string, start:number }[]} */
+  const stack = [];
+  let i = 0;
+  while (i < text.length) {
+    // ルビ記法範囲は括弧判定から除外（親文字中の「」等は稀だが、《》誤検知を防ぐ）
+    if (inAny(rubyRanges, i)) {
+      // 範囲の end までスキップ
+      let end = i + 1;
+      for (const r of rubyRanges) {
+        if (i >= r.start && i < r.end) {
+          end = r.end;
+          break;
+        }
+      }
+      i = end;
+      continue;
+    }
+    const ch = text[i];
+    const cpLen = ch >= '\uD800' && ch <= '\uDBFF' && i + 1 < text.length ? 2 : 1;
+    // サロゲートは括弧にならない
+    if (cpLen === 2) {
+      i += 2;
+      continue;
+    }
+
+    if (openToClose[ch]) {
+      stack.push({ open: ch, close: openToClose[ch], start: i });
+    } else if (closeToOpen[ch]) {
+      const top = stack.length ? stack[stack.length - 1] : null;
+      if (top && top.close === ch) {
+        stack.pop();
+      } else {
+        emit('unmatched-close-bracket', i, i + 1, ch);
+      }
+    }
+    i += 1;
+  }
+  for (const fr of stack) {
+    emit('unclosed-bracket', fr.start, fr.start + fr.open.length, fr.open);
+  }
 }
 
 function scan(text, re, cb) {
@@ -1747,6 +1841,10 @@ const WARNING_LABELS = {
   'fullspace-only-line': '全角空白のみの行',
   'consecutive-blank': '連続空行',
   'ruby-syntax-error': 'ルビ構文エラー',
+  'unclosed-bracket': '閉じていない括弧',
+  'unmatched-close-bracket': '開きのない閉じ括弧',
+  'repeated-chouon': '伸ばし棒の連続',
+  'lonely-katakana-ni': '単独のカタカナ「ニ」（漢字「二」の誤りの可能性）',
 };
 
 const SEVERITY = {
@@ -1763,6 +1861,10 @@ const SEVERITY = {
   'fullspace-only-line': 'warning',
   'consecutive-blank': 'info',
   'ruby-syntax-error': 'error',
+  'unclosed-bracket': 'warning',
+  'unmatched-close-bracket': 'warning',
+  'repeated-chouon': 'warning',
+  'lonely-katakana-ni': 'warning',
 };
 
 const DEFAULT_LIMIT = 1000;
@@ -1854,6 +1956,13 @@ function detectWarnings(text, opt = {}) {
   scan(text, /[！？](?=[^\s　！？」』）】〉])/g, (m) => on('no-space-after-bang') && add('no-space-after-bang', m.index, m.index + 1));
   scan(text, /…+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
   scan(text, /―+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
+  // 伸ばし棒「ー」(U+30FC) が2つ以上連続
+  scan(text, /ー{2,}/g, (m) => on('repeated-chouon') && add('repeated-chouon', m.index, m.index + m[0].length));
+  // 単独のカタカナ「ニ」（前後がカタカナ語を構成する文字でない）→ 漢字「二」誤変換が多い
+  // カタカナ語の一部: ァ-ヶ・ー・゛゜・ヽヾ
+  scan(text, /(?<![ァ-ヶー゛゜ヽヾ])ニ(?![ァ-ヶー゛゜ヽヾ])/g, (m) =>
+    on('lonely-katakana-ni') && add('lonely-katakana-ni', m.index, m.index + 1)
+  );
   scan(text, /\t/g, (m) => {
     // 行末TABは trailing-space に任せる（二重検出を避ける）
     if (on('tab') && !inTrailing(m.index)) add('tab', m.index, m.index + 1);
@@ -1915,6 +2024,15 @@ function detectWarnings(text, opt = {}) {
     scan(text, /｜(?![^《\n]*《)/g, (m) => add('ruby-syntax-error', m.index, m.index + 1));
   }
 
+  // 括弧の対応（閉じていない開き／開きのない閉じ）
+  // 《》はルビ記法のため対象外。ルビ範囲内の括弧もスキップ。
+  if (on('unclosed-bracket') || on('unmatched-close-bracket')) {
+    detectBracketBalance(text, rubyRanges, (code, start, end, mark) => {
+      if (!on(code)) return;
+      add(code, start, end, `${WARNING_LABELS[code]}　${mark}`);
+    });
+  }
+
   items.sort((a, b) => {
     const ds = a.range.start - b.range.start;
     if (ds) return ds;
@@ -1931,6 +2049,8 @@ function detectWarnings(text, opt = {}) {
 function warnCodeOrder(code) {
   const order = {
     'ruby-syntax-error': 10,
+    'unmatched-close-bracket': 12,
+    'unclosed-bracket': 14,
     tab: 20,
     'halfwidth-space': 30,
     halfwidth: 40,
@@ -1938,6 +2058,8 @@ function warnCodeOrder(code) {
     'period-before-bracket': 60,
     'no-space-after-bang': 70,
     'odd-leader-dash': 80,
+    'repeated-chouon': 85,
+    'lonely-katakana-ni': 87,
     'dialog-indent': 90,
     'indent-missing': 100,
     'fullspace-only-line': 110,
@@ -1945,6 +2067,72 @@ function warnCodeOrder(code) {
     'ruby-off': 130,
   };
   return order[code] ?? 500;
+}
+
+/**
+ * 括弧対応チェック。
+ * @param {string} text
+ * @param {{start:number,end:number}[]} rubyRanges
+ * @param {(code:string, start:number, end:number, mark:string) => void} emit
+ */
+function detectBracketBalance(text, rubyRanges, emit) {
+  /** @type {Record<string,string>} */
+  const openToClose = {
+    '「': '」',
+    '『': '』',
+    '（': '）',
+    '【': '】',
+    '〔': '〕',
+    '［': '］',
+    '〈': '〉',
+    '(': ')',
+    '[': ']',
+    '{': '}',
+  };
+  /** @type {Record<string,string>} */
+  const closeToOpen = {};
+  for (const [o, c] of Object.entries(openToClose)) closeToOpen[c] = o;
+
+  /** @type {{ open:string, close:string, start:number }[]} */
+  const stack = [];
+  let i = 0;
+  while (i < text.length) {
+    // ルビ記法範囲は括弧判定から除外（親文字中の「」等は稀だが、《》誤検知を防ぐ）
+    if (inAny(rubyRanges, i)) {
+      // 範囲の end までスキップ
+      let end = i + 1;
+      for (const r of rubyRanges) {
+        if (i >= r.start && i < r.end) {
+          end = r.end;
+          break;
+        }
+      }
+      i = end;
+      continue;
+    }
+    const ch = text[i];
+    const cpLen = ch >= '\uD800' && ch <= '\uDBFF' && i + 1 < text.length ? 2 : 1;
+    // サロゲートは括弧にならない
+    if (cpLen === 2) {
+      i += 2;
+      continue;
+    }
+
+    if (openToClose[ch]) {
+      stack.push({ open: ch, close: openToClose[ch], start: i });
+    } else if (closeToOpen[ch]) {
+      const top = stack.length ? stack[stack.length - 1] : null;
+      if (top && top.close === ch) {
+        stack.pop();
+      } else {
+        emit('unmatched-close-bracket', i, i + 1, ch);
+      }
+    }
+    i += 1;
+  }
+  for (const fr of stack) {
+    emit('unclosed-bracket', fr.start, fr.start + fr.open.length, fr.open);
+  }
 }
 
 function scan(text, re, cb) {
