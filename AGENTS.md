@@ -1,10 +1,10 @@
-# AGENTS.md — 縦View（TateView）実装指示書 v3（実装確定）
+# AGENTS.md — 縦View（TateView）実装指示書 v3（実装確定）／v0.9
 
 このファイルは、本プロジェクトを実装/保守するAIエージェント（ローカルLLM含む）向けの作業指示書である。
 迷ったら本書のルールを最優先で従うこと。仕様の背景は `縦書きビュアー仕様_v4.md`（内容はv6 FIX）、全体設計は `縦書きビュアー実装プラン.md` を参照。
 
-> **本プロジェクトは実装済み（FIX）。最終の確定事項は末尾「## 実装確定メモ（v3）」を参照し、以前の記述と差異がある場合はそちらを優先すること。**
-> プロダクト名：**縦View**、配布ファイル：**dist/TateView.html**。
+> **本プロジェクトは実装済み（FIX）。最終の確定事項は末尾「## 実装確定メモ（v3 / FIX → v0.9 追記）」を参照し、以前の記述と差異がある場合はそちらを優先すること。**
+> プロダクト名：**縦View**、バージョン：**v0.9**、配布ファイル：**dist/TateView.html**。
 
 > v2での主な変更（監査反映）
 > - 内部オフセットを **UTF-16 コードユニット基準**へ統一（旧：コードポイント基準）
@@ -25,7 +25,7 @@
 ## 0. 絶対に守る制約（Non-negotiable）
 
 1. **外部ライブラリ・フレームワーク禁止。** 素の HTML / CSS / JavaScript(ES Modules) のみ。npm依存を追加しない。
-2. **最終成果物は単一HTMLファイル** `dist/viewer.html`（CSS・JS・Workerを全てインライン化）。開発は `src/` の複数ファイルで行い、`build.js`（Node標準モジュールのみ）で結合する。
+2. **最終成果物は単一HTMLファイル** `dist/TateView.html`（CSS・JS・Workerを全てインライン化）。開発は `src/` の複数ファイルで行い、`build.js`（Node標準モジュールのみ）で結合する。
 3. **ページ分割はDOM計測に依存してはならない。** ページ境界は「文字数モデル」だけで決定的に計算する。同じ原稿＋同じ設定なら、どの端末・どのウィンドウ幅でも必ず同じ境界になること。
 4. **重い処理はすべて Web Worker 側**（文字コード判定・正規化・トークナイズ・ページ分割・ワーニング検出・検索）。メインスレッドは描画とUIのみ。
 5. **オフセットは常に「正規化済みテキスト（改行LF化後）」上の UTF-16 コードユニット位置**で扱う（詳細は §3.0）。現在位置・検索・ワーニングすべてこの基準。
@@ -46,7 +46,7 @@
     normalize.js      # 改行正規化
     tokenizer.js      # トークナイズ・ルビ解析（ストリーミング）
     paginator.js      # ページ分割（禁則・ぶら下げ）
-    warnings.js       # ワーニング検出15項目
+    warnings.js       # ワーニング検出（字下げ・約物・括弧・伸ばし棒・単独ニ 等）
     search.js         # 全文・見出し検索
   ui/
     renderer.js       # 縦書きDOM生成（表示ページのみ）
@@ -57,9 +57,9 @@
 /tests
   fixtures/           # サンプル原稿(.txt) と期待値(.json)
   *.test.mjs          # node --test で実行できるテスト
-build.js              # src を dist/viewer.html に結合（main/workerの2バンドル）
+build.js              # src を dist/TateView.html に結合（main/workerの2バンドル）
 dist/
-  viewer.html         # 最終成果物
+  TateView.html       # 最終成果物
 ```
 
 `modules/` の各ファイルは **副作用のない純粋関数**として書き、Worker外（Node）からも import してテストできるようにする。DOMやWorker APIをこれらの中で直接触らないこと。
@@ -348,7 +348,7 @@ tategaki-position:<fileName>
 ```
 同名衝突はMVPでは許容。将来 File System Access API 環境ではファイルハンドルを IndexedDB に保持する方式を検討。
 
-**設定**（原稿共通、別キー `tategaki-settings`）：ページ形式、テーマ、フォント種別、フォントサイズ、禁則設定、ぶら下げ設定、ルビ表示、半角文字色表示。起動時に復元、無ければ既定値（プリセット「40字×18行」、ライト、明朝、禁則ON、ぶら下げON、ルビON、半角色ON）。
+**設定**（原稿共通、別キー `tategaki-settings`）：ページ形式、テーマ、フォント種別、フォントサイズ／fontSizeAuto、禁則設定、ぶら下げ設定、ルビ表示、半角色、空白ハイライト、升目。起動時に復元、無ければ既定値（プリセット「40字×16行」、ライト、明朝、字級auto、禁則ON、ぶら下げON、ルビON、半角色ON、空白OFF、升目OFF）。
 
 ---
 
@@ -364,11 +364,11 @@ worker bundle: worker.js + modules/*
 変換方針：
 - 各モジュールの `import`/`export` を除去し、依存順に連結して1つのIIFE（即時関数）へ包み、名前衝突を避ける（各バンドルを独立スコープに）。
 - worker bundle は文字列化し、`new Blob([...], {type:'text/javascript'})` + `URL.createObjectURL` で Worker を生成する形へ変換して main bundle 内に埋め込む。
-- 最終 `dist/viewer.html` に `<link>`/外部 `<script src>` を残さない。
+- 最終 `dist/TateView.html` に `<link>`/外部 `<script src>` を残さない（GA は https 時のみ JS で動的挿入）。
 
 **ビルドテスト（tests/ に追加）：**
 ```
-- dist/viewer.html に外部 script/link が無い
+- dist/TateView.html に外部 script/link が無い（GA 動的挿入を除く）
 - 相対 import / export 文が残っていない
 - 生成した Worker が起動し ping→pong を返す
 - file:// で最小原稿を読み込んで1ページ表示できる
@@ -445,9 +445,10 @@ worker bundle: worker.js + modules/*
 
 ---
 
-## 実装確定メモ（v3 / FIX）
+## 実装確定メモ（v3 / FIX → v0.9 追記）
 
 実装済みの最終仕様。以前の記述と差異がある箇所は本節を優先する。
+プロダクト名：**縦View**、バージョン **v0.9**、配布：**dist/TateView.html**。
 
 ### 実際のディレクトリ構成
 ```
@@ -455,32 +456,64 @@ worker bundle: worker.js + modules/*
   index.html, styles.css, main.js, worker.js
   modules/  normalize.js encoding.js kinsoku.js tokenizer.js paginator.js warnings.js search.js position.js
   ui/       renderer.js settings.js   (navigator/filewatch/uiはmain.jsに集約)
-/tests      engine.test.mjs（node --test で32件・全緑）
-build.js    → dist/TateView.html を生成（main/worker 2バンドル、外部参照なしを検証）
+/tests      engine.test.mjs（node --test）
+build.js    → dist/TateView.html を生成（main/worker 2バンドル、外部参照なしを検証。GAは https 時のみ動的読込）
 /sample     sample_utf8.txt / sample_sjis.txt
 ```
-- 配布物は **dist/TateView.html**（単一HTML・依存ゼロ）。ビルド：`node build.js`。テスト：`node --test`。
+- 配布物は **dist/TateView.html**（単一HTML・ランタイム依存ゼロ）。ビルド：`node build.js`。テスト：`node --test`。
+- リポジトリ: https://github.com/rorita-kenji/tateview
+
+### 体裁プリセット（settings.js）
+| プリセット | 字×行 | 字数/頁 |
+|-----------|------:|--------:|
+| 20×20 | 20×20 | 400 |
+| 40×16（既定） | 40×16 | 640 |
+| 40×32 | 40×32 | 1280 |
+| 40×34 | 40×34 | 1360 |
+| 42×34 | 42×34 | 1428 |
 
 ### レンダリング（renderer.js / main.js）確定事項
-- **空行（中身のない列）も通常幅の空白列として表示**する。CSS `.col::after { content: "\200B"; }` で行ボックスを生成し列幅（＝行の太さ）を確保する（これが無いと空行がつぶれて行数が減って見える）。
-- **フィット**：指定字数×行数がビューに収まらない場合、`#page` に `transform: scale()` を掛けてページ全体を等倍縮小し、全列を必ず表示する（フォント計算の誤差に非依存）。基準字級は実測プローブ（`あ`×charsPerColumn を fs=100 で測る）から算出し、`字級`セレクトは収まるサイズのみ提示。
-- **半角**：`text-orientation: sideways` を明示。**ルビOFF時はルビ記法込みの元テキストをそのまま表示**（親文字のみにしない）。
-- **コピー**：`copy` イベントを捕捉し、選択内容から `rt`/`rp` を除去して親文字のみを `clipboardData` に設定。
-- **見出し**：`#`=章 / `##`=話 で色を分ける（`.heading-1` / `.heading-2`）。組版は本文と同一。
-- **升目**：`#page.grid` で各列 `height: var(--col-h)`（=charsPerColumn×セル）＋縦横罫線を空マスにも描画。目盛りは `.ruler-right`（文字位置・半文字上）と `.ruler-top`（列位置・半文字左）をページ外周に一列だけ、5単位で表示。
+- **空行（中身のない列）も通常幅の空白列として表示**する。CSS `.col::after { content: "\200B"; }` で行ボックスを生成し列幅（＝行の太さ）を確保する。
+- **字級 auto（fontSizeAuto）**：ウィンドウに収まる最大字級を実測プローブから算出し追随。手動で最大未満を選ぶと固定、最大を選ぶと auto に戻る。上限 120px。はみ出し時は従来どおり `#page` に `scale()`。
+- **半角**：`text-orientation: sideways`。半角色ONで緑系。
+- **空白ハイライト（spaceColor）**：全角スペース＝薄いピンク（`.space-full`）、半角スペース/TAB＝薄い緑（`.space-half`）。行頭半角スペースは `white-space: pre` で保持。
+- **ルビOFF時はルビ記法込みの元テキストをそのまま表示**（親文字のみにしない）。
+- **コピー**：`copy` イベントで `rt`/`rp` 除去、親文字のみ。
+- **見出し**：`#`=章 / `##`=話（`.heading-1` / `.heading-2`）。
+- **升目**：罫線は淡色（`--grid`）。目盛り右＝文字位置（半文字上）、上＝行番号を各行センターに。
 
 ### UI構成（index.html）確定事項
-- 上部メニュー1段：ロゴ／開く／ファイル情報（名前・文字コード・改行・総文字数）／検索窓・🔍・前・次・件数／更新（自動更新可能時は `.badge` の「自動更新」表示に切替）／体裁／字／行／校正（`.primary` 強調）。
-- 左サイドバー：`#thumbs`（サムネイル、クリック/ドラッグでページ切替、見出しを小ラベル）＋ `#controls`（前/次〔縦書きにあわせ「◀ 次」左・「前 ▶」右〕、ページ番号/総ページ数、現ページ文字数/総文字数、進捗、禁則・ぶら下げ・ルビ・半角色・升目、テーマ、書体・字級）。
-- 右 `aside`：校正パネル（severity 色分け・ジャンプ・前後移動）。下部バーは無し。
-- **ドラッグ＆ドロップ**対応（対応環境ではファイルハンドル取得→自動更新監視も有効化）。
+- 上部：ロゴ／開く／ファイル情報／検索／更新／体裁／字／行／校正。
+- 左サイド（幅 168px）：サムネ＋controls。チェックは **2列×3行**（禁則・ぶら下げ／ルビ・半角色／空白・升目）。テーマ。フォントと字級は横並び（「書体」ラベルなし）。クレジット `v0.9` / by やまもりやもり。
+- 右 aside（幅 140px）：校正パネル。項目先頭 `p{N} {行}行`。字下げ漏れは2行表示。選択中は黄＋枠。前/次は端でループしない（先頭の前→1ページ目・ハイライト解除）。
+- キー：Space=次、Shift+Space=前。←/↓=次、→/↑=前。
+- DnD対応。GA は `location.protocol === 'https:'` のときのみ。
+
+### 校正ワーニング（warnings.js）確定
+| code | severity | 概要 |
+|------|----------|------|
+| indent-missing | warning | 字下げ漏れ（行頭半角SP/TAB時は出さない。ラベルに行頭〜10字） |
+| dialog-indent | warning | `　「` 始まり |
+| period-before-bracket | warning | `。」` 等 |
+| no-space-after-bang | warning | ！？直後の不足 |
+| odd-leader-dash | warning | …／― の連続が奇数 |
+| repeated-chouon | warning | `ー` が2つ以上連続 |
+| lonely-katakana-ni | warning | 単独カタカナ「ニ」 |
+| unclosed-bracket | warning | 閉じていない開き括弧 |
+| unmatched-close-bracket | warning | 開きのない閉じ括弧 |
+| halfwidth | info | 非空白を含む半角ラン（行末空白は範囲から除外） |
+| halfwidth-space | info | 行中の空白のみラン（行末は trailing に任せる） |
+| trailing-space | warning | 行末空白（最優先） |
+| tab / fullspace-only-line / consecutive-blank / ruby-off / ruby-syntax-error | … | 従来どおり |
+
+重複抑制：行末空白 > 半角スペース（空白のみ） > 半角文字。括弧の `《》` とルビ範囲は除外。
 
 ### 入力・更新確定事項
-- 文字コードは**自動判定のみ**（手動選択UIは持たない）。判定不能時はファイル情報に「文字コード判定不可」。改行コード（CRLF/LF/CR/混在）を判定し表示。
-- File System Access 対応時：`getFile()` を一定間隔＋`visibilitychange`で確認し、`lastModified`変化で再読込（現在位置保持）。再読込時に「更新された」を約1秒トースト。非対応/`file://` は「更新」ボタンで手動。
+- 文字コードは**自動判定のみ**。改行コード表示あり。
+- File System Access 時は自動再読込＋トースト。`pendingOffset` はページ移動・ジャンプで更新し再分割後も位置維持。
 
 ### Worker通信（実装形）
-- メッセージは `{ documentId, requestId, type, payload }`。main側は「チャンネル（paginate/warnings/search）ごとの最新 requestId」と最新 documentId 以外の応答を破棄する（リクエスト種別 `detectWarnings` と応答種別 `warnings` の対応に注意：チャンネル単位で突き合わせる）。
+- `{ documentId, requestId, type, payload }`。チャンネル単位の最新 requestId 以外破棄。
 
 ### 残課題（実機でのみ確認可能）
-- 縦書き描画・`text-orientation`・選択コピー結果・`file://`でのBlob Worker起動は実ブラウザ確認が必要（Node/jsdomでは検証不可）。
+- 縦書き描画・`text-orientation`・選択コピー結果・`file://`でのBlob Worker起動は実ブラウザ確認が必要。
