@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS = {
   theme: 'light',
   fontFamily: 'mincho',
   fontSize: 20,
+  fontSizeAuto: true,
   kinsoku: true,
   burasage: true,
   showRuby: true,

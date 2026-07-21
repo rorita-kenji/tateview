@@ -179,7 +179,7 @@ function renderCurrent() {
     highlights.push({ ...state._warnHighlight, kind: 'warn' });
   }
 
-  const fs = Math.min(state.settings.fontSize, maxFitFontSize());
+  const fs = effectiveFontSize();
   pageEl.style.transform = 'none';
   applyFs(fs);
   renderPage(pageEl, state.text, page, {
@@ -206,6 +206,13 @@ function renderCurrent() {
 
   updateStatus();
   persistPosition();
+}
+
+/** 表示に使う字級。auto 時はウィンドウに収まる最大、手動時は指定値（上限は maxFit） */
+function effectiveFontSize() {
+  const max = maxFitFontSize();
+  if (state.settings.fontSizeAuto !== false) return max;
+  return Math.max(8, Math.min(state.settings.fontSize || max, max));
 }
 
 // 全列の実描画範囲（幅・高さ）を測る。overflow で見切れても正しい寸法が取れる。
@@ -275,6 +282,7 @@ function markHeadings(pageEl, page) {
 
 // 1文字ぶんの実寸をプローブ測定し、指定の字数×行数が収まる最大字級を理論計算する。
 // 推定係数に頼らないので、指定した行数が必ず表示される。
+const FONT_SIZE_MAX_CAP = 120;
 function maxFitFontSize() {
   const wrap = $('pageWrap');
   const availH = Math.max(40, wrap.clientHeight - 44);
@@ -292,30 +300,49 @@ function maxFitFontSize() {
 
   const colH100 = rect.height;   // charsPerColumn 文字ぶんの列の長さ（fs=100）
   const colW100 = rect.width;    // 1列の幅（fs=100）
-  if (!colH100 || !colW100) return s.fontSize;
+  if (!colH100 || !colW100) return s.fontSize || 20;
 
-  const gap = parseFloat(getComputedStyle($('page')).columnGap) || 0;
+  // #page は flex の gap（columnGap ではない）
+  const pageCs = getComputedStyle($('page'));
+  const gap = parseFloat(pageCs.gap || pageCs.columnGap) || 0;
   const fsByH = (availH * PROBE_FS) / colH100;
   const fsByW = ((availW - (s.columnsPerPage - 1) * gap) * PROBE_FS) / (s.columnsPerPage * colW100);
-  return Math.max(8, Math.floor(Math.min(fsByH, fsByW)));
+  // 余白を少し見て安全側へ（はみ出し scale に頼る前にほぼ最大）
+  const fit = Math.floor(Math.min(fsByH, fsByW) * 0.98);
+  return Math.max(8, Math.min(FONT_SIZE_MAX_CAP, fit));
 }
 
 // 字級セレクトを「表示可能なサイズ」だけで再構築する。
+// auto 時は常に最大を選び、ウィンドウ拡大に追随する。
 function populateFontSizes() {
   const sel = $('fontSize');
   const max = maxFitFontSize();
-  let cur = Math.min(state.settings.fontSize, max);
-  if (cur < 8) cur = 8;
+  let cur;
+  if (state.settings.fontSizeAuto !== false) {
+    cur = max;
+    state.settings.fontSizeAuto = true;
+  } else {
+    cur = Math.min(state.settings.fontSize || max, max);
+    if (cur < 8) cur = 8;
+    // 手動指定が実質最大と同じなら auto に戻して拡大に追随
+    if (cur >= max) {
+      cur = max;
+      state.settings.fontSizeAuto = true;
+    }
+  }
   state.settings.fontSize = cur;
+
   const sizes = [];
-  for (let v = 8; v <= max; v += 2) sizes.push(v);
+  const step = max > 48 ? 4 : 2;
+  for (let v = 8; v <= max; v += step) sizes.push(v);
   if (!sizes.includes(cur)) sizes.push(cur);
+  if (!sizes.includes(max)) sizes.push(max);
   sizes.sort((a, b) => a - b);
   sel.innerHTML = '';
   for (const v of sizes) {
     const o = document.createElement('option');
     o.value = String(v);
-    o.textContent = v + 'px';
+    o.textContent = v === max ? `${v}px（最大）` : `${v}px`;
     sel.appendChild(o);
   }
   sel.value = String(cur);
@@ -472,7 +499,7 @@ function renderWarnings(total) {
     const li = document.createElement('li');
     li.className = 'warn-item sev-' + w.severity;
     li.dataset.idx = String(idx);
-    li.textContent = formatWarningLabel(w);
+    fillWarningItemContent(li, w);
     li.title = w.severity + ' / ' + (w.label || w.code);
     if (idx === state.warnIndex) li.classList.add('active');
     li.addEventListener('click', () => jumpWarning(idx));
@@ -480,13 +507,37 @@ function renderWarnings(total) {
   });
   syncWarnListActive();
 }
-/** 一覧先頭に「p・行」を付ける（ページ内の原稿用紙行＝列番号） */
-function formatWarningLabel(w) {
+/**
+ * 一覧項目の表示を組み立てる。
+ * 字下げ漏れは頻出のため「位置＋種別」と「行頭」を2行に分ける。
+ */
+function fillWarningItemContent(li, w) {
   const off = w.range && typeof w.range.start === 'number' ? w.range.start : 0;
   const loc = locateOnPages(off);
+  const prefix = loc ? `p${loc.page} ${loc.line}行` : 'p– –行';
   const base = w.label || w.code || '';
-  if (!loc) return `p– –行　${base}`;
-  return `p${loc.page} ${loc.line}行　${base}`;
+
+  // 字下げ漏れ　行頭… → 2行表示
+  if (w.code === 'indent-missing') {
+    const headSep = '字下げ漏れ';
+    let head = '';
+    if (base.startsWith(headSep)) {
+      head = base.slice(headSep.length).replace(/^　+/, '');
+    }
+    const line1 = document.createElement('div');
+    line1.className = 'warn-line1';
+    line1.textContent = `${prefix}　${headSep}`;
+    li.appendChild(line1);
+    if (head) {
+      const line2 = document.createElement('div');
+      line2.className = 'warn-line2';
+      line2.textContent = head;
+      li.appendChild(line2);
+    }
+    return;
+  }
+
+  li.textContent = `${prefix}　${base}`;
 }
 /**
  * オフセットが属する表示ページ番号（1始まり）と、
@@ -730,7 +781,14 @@ function bindUI() {
     state.settings.fontFamily = e.target.value; applyAppearance(); persist(); renderCurrent();
   });
   $('fontSize').addEventListener('change', (e) => {
-    state.settings.fontSize = clampInt(e.target.value, 8, 60, 20); persist(); renderCurrent();
+    const max = maxFitFontSize();
+    const v = clampInt(e.target.value, 8, FONT_SIZE_MAX_CAP, max);
+    state.settings.fontSize = v;
+    // 最大を選んだら auto（ウィンドウ拡大に追随）。それ以外は固定。
+    state.settings.fontSizeAuto = v >= max;
+    persist();
+    populateFontSizes();
+    renderCurrent();
   });
 
   $('prevBtn').addEventListener('click', () => go(-1));
