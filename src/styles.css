@@ -1,0 +1,271 @@
+:root {
+  --fs: 20px;
+  --bg: #f7f5ef;
+  --fg: #1a1a1a;
+  --panel: #ece8dd;
+  --border: #d5cfbf;
+  --accent: #8a5a2b;
+  --half: #1f9d4a;
+  --space-full: #f0c4d0;
+  --space-half: #7dcca0;
+  --mark: #ffe58a;
+  --heading1: #b0392f;
+  --heading2: #2f6bb0;
+  --grid: #c9c1ad;
+}
+:root[data-theme='dark'] {
+  --bg: #1b1c1e;
+  --fg: #e8e6e0;
+  --panel: #26282b;
+  --border: #3a3d41;
+  --accent: #d9a066;
+  --half: #4ade80;
+  --space-full: #f5c8d6;
+  --space-half: #86efac;
+  --mark: #6b5a1e;
+  --heading1: #ff8a7a;
+  --heading2: #8ab6ff;
+  --grid: #45474b;
+}
+:root[data-font='mincho'] { --font: 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'MS Mincho', serif; }
+:root[data-font='gothic'] { --font: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#topbar {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 5px 10px;
+  display: flex; align-items: center; gap: 5px 7px; flex-wrap: wrap;
+  font-size: 13px;
+}
+#topbar .brand { font-weight: 700; font-size: 16px; color: var(--accent); letter-spacing: 0.03em; }
+#fileMeta {
+  font-size: 12px; flex: 0 1 auto; min-width: 60px; max-width: 24em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#topbar #searchInput { width: 8em; }
+#topbar button { padding: 3px 8px; }
+.badge {
+  font-size: 12px; color: var(--accent); white-space: nowrap; opacity: 0.85;
+}
+
+label { display: inline-flex; align-items: center; gap: 4px; }
+select, input[type='number'], input[type='text'] {
+  font: inherit; padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--fg);
+}
+input[type='number'] { width: 3.5em; }
+button {
+  font: inherit; padding: 3px 10px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg); color: var(--fg); cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+button.primary:hover { filter: brightness(1.08); }
+.sep { width: 1px; height: 20px; background: var(--border); }
+
+main { flex: 1; display: flex; min-height: 0; }
+
+/* 左サイドバー: サムネイル(上) + 下段メニュー(下) */
+#sidebar {
+  width: 200px; flex: 0 0 auto; display: flex; flex-direction: column;
+  background: var(--panel); border-right: 1px solid var(--border); min-height: 0;
+}
+#thumbs {
+  flex: 1 1 auto; overflow-y: auto; overflow-x: hidden;
+  padding: 6px; user-select: none;
+}
+#controls {
+  flex: 0 0 auto; border-top: 1px solid var(--border);
+  padding: 6px; display: flex; flex-direction: column; gap: 3px; font-size: 12px;
+}
+#controls .ctrl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+#controls .ctrl-row.nav { gap: 6px; }
+#controls .ctrl-row.nav button { flex: 1 1 auto; }
+#controls .ctrl-row.status { gap: 10px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+#controls #jumpInput { width: 4.5em; }
+#controls #progress { color: var(--accent); min-height: 1em; }
+#controls hr { width: 100%; border: none; border-top: 1px solid var(--border); margin: 1px 0; }
+#controls #progress:empty { display: none; }
+#controls select { max-width: 100%; }
+#controls .app-credit {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  font-size: 10px;
+  line-height: 1.35;
+  opacity: 0.62;
+  color: var(--fg);
+  user-select: none;
+}
+#controls .app-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+#controls .app-credit a:hover { opacity: 1; color: var(--accent); }
+.thumb {
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg);
+  margin-bottom: 6px; padding: 4px 6px; cursor: pointer; font-size: 11px;
+  display: flex; flex-direction: column; gap: 2px; min-height: 34px;
+}
+.thumb:hover { border-color: var(--accent); }
+.thumb.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.thumb .tnum { color: var(--fg); opacity: 0.55; }
+.thumb .thead { font-size: 10px; font-weight: 700; color: var(--heading1); line-height: 1.3; word-break: break-all; }
+.thumb .thead.h2 { color: var(--heading2); }
+
+#pageWrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 22px; overflow: hidden; }
+#page {
+  position: relative;
+  display: flex; flex-direction: row-reverse; gap: 0.4em;
+  height: 100%; align-items: flex-start; justify-content: center;
+}
+.col {
+  writing-mode: vertical-rl;
+  -webkit-writing-mode: vertical-rl;
+  /* nowrap だと連続/行頭の半角スペースが潰れる。改行トークンはDOMに出さないので pre で保持 */
+  white-space: pre;
+  font-size: var(--fs);
+  line-height: 1.7;
+  letter-spacing: 0.05em;
+  user-select: text;
+}
+/* 空行（中身のない列）でも通常幅の列として場所を確保する（原稿用紙の空行）。
+ * ゼロ幅スペースで行ボックスを生成し、列の幅（=行の太さ）を保つ。 */
+.col::after { content: "\200B"; }
+.col.heading-1 { color: var(--heading1); font-weight: 700; }
+.col.heading-2 { color: var(--heading2); font-weight: 700; }
+.half { text-orientation: sideways; -webkit-text-orientation: sideways; }
+/* heading の color より勝たせる（.col.heading-* は要素+2クラス） */
+#page .col .half-color { color: var(--half); }
+#page .col .space-full {
+  color: var(--space-full);
+  background-color: color-mix(in srgb, var(--space-full) 28%, transparent);
+  border-radius: 1px;
+}
+#page .col .space-half {
+  color: var(--space-half);
+  background-color: color-mix(in srgb, var(--space-half) 28%, transparent);
+  border-radius: 1px;
+  white-space: pre;
+}
+rt { user-select: none; font-size: 0.5em; }
+mark { background: var(--mark); color: inherit; }
+/* 校正ジャンプ箇所: 四角枠で目立たせる（縦書きでも各トークンを囲む） */
+#page mark.hl-warn {
+  background: color-mix(in srgb, var(--mark) 70%, transparent);
+  color: inherit;
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  box-sizing: border-box;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.02em 0.06em;
+  margin: 0 -0.02em;
+}
+#page mark.hl-search {
+  background: var(--mark);
+  color: inherit;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* 原稿用紙の升目（縦横）。文字が無いマスにも罫線を引く。
+ * --col-h = 1列の全長（charsPerColumn × セル間隔）、--cell = 1マスの間隔。JSが設定。 */
+#page.grid { gap: 0; }
+#page.grid .col {
+  height: var(--col-h);
+  box-sizing: border-box;
+  border-left: 1px solid var(--grid);
+  border-right: 1px solid var(--grid);
+  /* 横罫線（各マスの区切り）。列全長にわたって繰り返すため空きマスにも出る。 */
+  background-image:
+    repeating-linear-gradient(to bottom,
+      var(--grid) 0, var(--grid) 1px, transparent 1px, transparent var(--cell));
+  background-position: 0 0;
+}
+/* 升目の目盛り: ページ外周に一列だけ（右=文字位置5単位, 上=列位置5単位） */
+.ruler { position: absolute; color: var(--grid); font-size: 9px; pointer-events: none; user-select: none; }
+.ruler span {
+  position: absolute; writing-mode: horizontal-tb; -webkit-writing-mode: horizontal-tb; line-height: 1;
+}
+.ruler-right { top: 0; left: 100%; height: 100%; margin-left: 3px; }
+.ruler-right span { left: 0; transform: translateY(-50%); }
+.ruler-top { left: 0; bottom: 100%; width: 100%; margin-bottom: 3px; }
+/* right で行センター位置を指定し、translateX(50%) で数字自体を中央揃え */
+.ruler-top span { bottom: 0; transform: translateX(50%); text-align: center; }
+
+/* トースト（自動更新通知など） */
+#toast {
+  position: fixed; top: 54px; left: 50%; transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8); color: #fff; padding: 8px 18px; border-radius: 20px;
+  font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100;
+}
+#toast.show { opacity: 1; }
+
+/* ドラッグ&ドロップ */
+#dropHint {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(30, 30, 30, 0.55); color: #fff; font-size: 22px; z-index: 90;
+  border: 4px dashed rgba(255, 255, 255, 0.7); border-radius: 8px; margin: 10px;
+}
+body.dragover #dropHint { display: flex; }
+
+aside {
+  width: 0; overflow: hidden; background: var(--panel); border-left: 1px solid var(--border);
+  transition: width 0.15s; display: flex; flex-direction: column;
+}
+body.panel-open aside { width: 280px; }
+aside .section { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+aside h2 { font-size: 13px; margin: 0 0 6px; }
+#warnList { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+.warn-item { padding: 4px 6px; font-size: 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.warn-item:hover { background: var(--bg); }
+/* 本文の校正ハイライトと同じ黄＋枠で「今見ている項目」を示す */
+.warn-item.active {
+  background: color-mix(in srgb, var(--mark) 70%, transparent);
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  box-sizing: border-box;
+  margin: 1px 2px;
+  padding: 3px 5px;
+}
+.sev-error { border-left: 4px solid #d64545; }
+.sev-warning { border-left: 4px solid #d9a520; }
+.sev-info { border-left: 4px solid #4a90d9; }
+.warn-item.active.sev-error,
+.warn-item.active.sev-warning,
+.warn-item.active.sev-info {
+  /* active の四角枠を優先しつつ、重要度は左の色帯で残す */
+  box-shadow: inset 4px 0 0 0 currentColor;
+  border-left-color: var(--accent);
+}
+.warn-item.active.sev-error { box-shadow: inset 4px 0 0 0 #d64545; }
+.warn-item.active.sev-warning { box-shadow: inset 4px 0 0 0 #d9a520; }
+.warn-item.active.sev-info { box-shadow: inset 4px 0 0 0 #4a90d9; }
+
+footer {
+  background: var(--panel); border-top: 1px solid var(--border);
+  padding: 5px 10px; display: flex; gap: 14px; align-items: center; font-size: 12px;
+}
+footer .spacer { flex: 1; }
+#progress { color: var(--accent); }
+.hint { opacity: 0.7; }

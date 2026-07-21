@@ -1,0 +1,3131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>縦View</title>
+  <style>
+:root {
+  --fs: 20px;
+  --bg: #f7f5ef;
+  --fg: #1a1a1a;
+  --panel: #ece8dd;
+  --border: #d5cfbf;
+  --accent: #8a5a2b;
+  --half: #1f9d4a;
+  --space-full: #f0c4d0;
+  --space-half: #7dcca0;
+  --mark: #ffe58a;
+  --heading1: #b0392f;
+  --heading2: #2f6bb0;
+  --grid: #c9c1ad;
+}
+:root[data-theme='dark'] {
+  --bg: #1b1c1e;
+  --fg: #e8e6e0;
+  --panel: #26282b;
+  --border: #3a3d41;
+  --accent: #d9a066;
+  --half: #4ade80;
+  --space-full: #f5c8d6;
+  --space-half: #86efac;
+  --mark: #6b5a1e;
+  --heading1: #ff8a7a;
+  --heading2: #8ab6ff;
+  --grid: #45474b;
+}
+:root[data-font='mincho'] { --font: 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'MS Mincho', serif; }
+:root[data-font='gothic'] { --font: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#topbar {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 5px 10px;
+  display: flex; align-items: center; gap: 5px 7px; flex-wrap: wrap;
+  font-size: 13px;
+}
+#topbar .brand { font-weight: 700; font-size: 16px; color: var(--accent); letter-spacing: 0.03em; }
+#fileMeta {
+  font-size: 12px; flex: 0 1 auto; min-width: 60px; max-width: 24em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#topbar #searchInput { width: 8em; }
+#topbar button { padding: 3px 8px; }
+.badge {
+  font-size: 12px; color: var(--accent); white-space: nowrap; opacity: 0.85;
+}
+
+label { display: inline-flex; align-items: center; gap: 4px; }
+select, input[type='number'], input[type='text'] {
+  font: inherit; padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--fg);
+}
+input[type='number'] { width: 3.5em; }
+button {
+  font: inherit; padding: 3px 10px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg); color: var(--fg); cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+button.primary:hover { filter: brightness(1.08); }
+.sep { width: 1px; height: 20px; background: var(--border); }
+
+main { flex: 1; display: flex; min-height: 0; }
+
+/* 左サイドバー: サムネイル(上) + 下段メニュー(下) */
+#sidebar {
+  width: 200px; flex: 0 0 auto; display: flex; flex-direction: column;
+  background: var(--panel); border-right: 1px solid var(--border); min-height: 0;
+}
+#thumbs {
+  flex: 1 1 auto; overflow-y: auto; overflow-x: hidden;
+  padding: 6px; user-select: none;
+}
+#controls {
+  flex: 0 0 auto; border-top: 1px solid var(--border);
+  padding: 6px; display: flex; flex-direction: column; gap: 3px; font-size: 12px;
+}
+#controls .ctrl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+#controls .ctrl-row.nav { gap: 6px; }
+#controls .ctrl-row.nav button { flex: 1 1 auto; }
+#controls .ctrl-row.status { gap: 10px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+#controls #jumpInput { width: 4.5em; }
+#controls #progress { color: var(--accent); min-height: 1em; }
+#controls hr { width: 100%; border: none; border-top: 1px solid var(--border); margin: 1px 0; }
+#controls #progress:empty { display: none; }
+#controls select { max-width: 100%; }
+#controls .app-credit {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  font-size: 10px;
+  line-height: 1.35;
+  opacity: 0.62;
+  color: var(--fg);
+  user-select: none;
+}
+#controls .app-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+#controls .app-credit a:hover { opacity: 1; color: var(--accent); }
+.thumb {
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg);
+  margin-bottom: 6px; padding: 4px 6px; cursor: pointer; font-size: 11px;
+  display: flex; flex-direction: column; gap: 2px; min-height: 34px;
+}
+.thumb:hover { border-color: var(--accent); }
+.thumb.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.thumb .tnum { color: var(--fg); opacity: 0.55; }
+.thumb .thead { font-size: 10px; font-weight: 700; color: var(--heading1); line-height: 1.3; word-break: break-all; }
+.thumb .thead.h2 { color: var(--heading2); }
+
+#pageWrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 22px; overflow: hidden; }
+#page {
+  position: relative;
+  display: flex; flex-direction: row-reverse; gap: 0.4em;
+  height: 100%; align-items: flex-start; justify-content: center;
+}
+.col {
+  writing-mode: vertical-rl;
+  -webkit-writing-mode: vertical-rl;
+  /* nowrap だと連続/行頭の半角スペースが潰れる。改行トークンはDOMに出さないので pre で保持 */
+  white-space: pre;
+  font-size: var(--fs);
+  line-height: 1.7;
+  letter-spacing: 0.05em;
+  user-select: text;
+}
+/* 空行（中身のない列）でも通常幅の列として場所を確保する（原稿用紙の空行）。
+ * ゼロ幅スペースで行ボックスを生成し、列の幅（=行の太さ）を保つ。 */
+.col::after { content: "\200B"; }
+.col.heading-1 { color: var(--heading1); font-weight: 700; }
+.col.heading-2 { color: var(--heading2); font-weight: 700; }
+.half { text-orientation: sideways; -webkit-text-orientation: sideways; }
+/* heading の color より勝たせる（.col.heading-* は要素+2クラス） */
+#page .col .half-color { color: var(--half); }
+#page .col .space-full {
+  color: var(--space-full);
+  background-color: color-mix(in srgb, var(--space-full) 28%, transparent);
+  border-radius: 1px;
+}
+#page .col .space-half {
+  color: var(--space-half);
+  background-color: color-mix(in srgb, var(--space-half) 28%, transparent);
+  border-radius: 1px;
+  white-space: pre;
+}
+rt { user-select: none; font-size: 0.5em; }
+mark { background: var(--mark); color: inherit; }
+/* 校正ジャンプ箇所: 四角枠で目立たせる（縦書きでも各トークンを囲む） */
+#page mark.hl-warn {
+  background: color-mix(in srgb, var(--mark) 70%, transparent);
+  color: inherit;
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  box-sizing: border-box;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.02em 0.06em;
+  margin: 0 -0.02em;
+}
+#page mark.hl-search {
+  background: var(--mark);
+  color: inherit;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* 原稿用紙の升目（縦横）。文字が無いマスにも罫線を引く。
+ * --col-h = 1列の全長（charsPerColumn × セル間隔）、--cell = 1マスの間隔。JSが設定。 */
+#page.grid { gap: 0; }
+#page.grid .col {
+  height: var(--col-h);
+  box-sizing: border-box;
+  border-left: 1px solid var(--grid);
+  border-right: 1px solid var(--grid);
+  /* 横罫線（各マスの区切り）。列全長にわたって繰り返すため空きマスにも出る。 */
+  background-image:
+    repeating-linear-gradient(to bottom,
+      var(--grid) 0, var(--grid) 1px, transparent 1px, transparent var(--cell));
+  background-position: 0 0;
+}
+/* 升目の目盛り: ページ外周に一列だけ（右=文字位置5単位, 上=列位置5単位） */
+.ruler { position: absolute; color: var(--grid); font-size: 9px; pointer-events: none; user-select: none; }
+.ruler span {
+  position: absolute; writing-mode: horizontal-tb; -webkit-writing-mode: horizontal-tb; line-height: 1;
+}
+.ruler-right { top: 0; left: 100%; height: 100%; margin-left: 3px; }
+.ruler-right span { left: 0; transform: translateY(-50%); }
+.ruler-top { left: 0; bottom: 100%; width: 100%; margin-bottom: 3px; }
+/* right で行センター位置を指定し、translateX(50%) で数字自体を中央揃え */
+.ruler-top span { bottom: 0; transform: translateX(50%); text-align: center; }
+
+/* トースト（自動更新通知など） */
+#toast {
+  position: fixed; top: 54px; left: 50%; transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8); color: #fff; padding: 8px 18px; border-radius: 20px;
+  font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100;
+}
+#toast.show { opacity: 1; }
+
+/* ドラッグ&ドロップ */
+#dropHint {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(30, 30, 30, 0.55); color: #fff; font-size: 22px; z-index: 90;
+  border: 4px dashed rgba(255, 255, 255, 0.7); border-radius: 8px; margin: 10px;
+}
+body.dragover #dropHint { display: flex; }
+
+aside {
+  width: 0; overflow: hidden; background: var(--panel); border-left: 1px solid var(--border);
+  transition: width 0.15s; display: flex; flex-direction: column;
+}
+body.panel-open aside { width: 280px; }
+aside .section { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+aside h2 { font-size: 13px; margin: 0 0 6px; }
+#warnList { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+.warn-item { padding: 4px 6px; font-size: 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.warn-item:hover { background: var(--bg); }
+/* 本文の校正ハイライトと同じ黄＋枠で「今見ている項目」を示す */
+.warn-item.active {
+  background: color-mix(in srgb, var(--mark) 70%, transparent);
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  box-sizing: border-box;
+  margin: 1px 2px;
+  padding: 3px 5px;
+}
+.sev-error { border-left: 4px solid #d64545; }
+.sev-warning { border-left: 4px solid #d9a520; }
+.sev-info { border-left: 4px solid #4a90d9; }
+.warn-item.active.sev-error,
+.warn-item.active.sev-warning,
+.warn-item.active.sev-info {
+  /* active の四角枠を優先しつつ、重要度は左の色帯で残す */
+  box-shadow: inset 4px 0 0 0 currentColor;
+  border-left-color: var(--accent);
+}
+.warn-item.active.sev-error { box-shadow: inset 4px 0 0 0 #d64545; }
+.warn-item.active.sev-warning { box-shadow: inset 4px 0 0 0 #d9a520; }
+.warn-item.active.sev-info { box-shadow: inset 4px 0 0 0 #4a90d9; }
+
+footer {
+  background: var(--panel); border-top: 1px solid var(--border);
+  padding: 5px 10px; display: flex; gap: 14px; align-items: center; font-size: 12px;
+}
+footer .spacer { flex: 1; }
+#progress { color: var(--accent); }
+.hint { opacity: 0.7; }
+
+</style>
+  <!-- Google tag (gtag.js) — https のみ（file://・http ローカルでは読み込まない） -->
+  <script>
+    if (location.protocol === 'https:') {
+      var script = document.createElement('script');
+      script.async = true;
+      script.src = 'https://www.googletagmanager.com/gtag/js?id=G-FEWVNH23P4';
+      document.head.appendChild(script);
+
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-FEWVNH23P4');
+    }
+  </script>
+</head>
+<body>
+  <!-- 上部メニュー(1段): ロゴ / 開く / ファイル名 / 検索 / 校正 / 更新 / 体裁 / 字・行 -->
+  <div id="topbar">
+    <span class="brand">縦View</span>
+    <button id="openFsBtn">開く</button>
+    <input id="fileInput" type="file" accept=".txt,text/plain" hidden />
+    <span id="fileMeta" class="hint">ファイル未読み込み</span>
+
+    <span class="sep"></span>
+    <input id="searchInput" type="text" placeholder="検索" />
+    <button id="searchBtn" title="検索">🔍</button>
+    <button id="searchPrev" title="前の一致">前</button>
+    <button id="searchNext" title="次の一致">次</button>
+    <span id="searchCount" class="hint"></span>
+
+    <span class="sep"></span>
+    <button id="reloadBtn" title="手動で再読込">更新</button>
+    <span id="autoLabel" class="badge" hidden>自動更新</span>
+    <select id="presetSelect" title="体裁"></select>
+    <label>字<input id="cpc" type="number" min="1" max="60" /></label>
+    <label>行<input id="cpp" type="number" min="1" max="60" /></label>
+    <button id="togglePanel" class="primary" title="校正パネル">校正</button>
+  </div>
+
+  <div id="toast"></div>
+  <div id="dropHint">ここにテキストファイルをドロップ</div>
+
+  <main>
+    <div id="sidebar">
+      <div id="thumbs" title="ドラッグでページ移動"></div>
+      <!-- 左メニュー: ページ移動 + 表示設定 -->
+      <div id="controls">
+        <div class="ctrl-row nav">
+          <button id="nextBtn">◀ 次</button>
+          <button id="prevBtn">前 ▶</button>
+        </div>
+        <div class="ctrl-row status">
+          <label>ページ<input id="jumpInput" type="number" min="1" /></label>
+          <span>/ <span id="totalPages">0</span></span>
+        </div>
+        <div class="ctrl-row status">
+          <span><span id="pageChars">0</span>文字 / 総文字<span id="totalChars">0</span></span>
+          <span id="progress"></span>
+        </div>
+        <hr />
+        <div class="ctrl-row">
+          <label><input id="kinsoku" type="checkbox" />禁則</label>
+          <label><input id="burasage" type="checkbox" />ぶら下げ</label>
+        </div>
+        <div class="ctrl-row">
+          <label><input id="showRuby" type="checkbox" />ルビ</label>
+          <label><input id="halfColor" type="checkbox" />半角色</label>
+          <label><input id="spaceColor" type="checkbox" />空白</label>
+          <label><input id="gridLines" type="checkbox" />升目</label>
+        </div>
+        <div class="ctrl-row">
+          <label>テーマ<select id="themeSelect"><option value="light">ライト</option><option value="dark">ダーク</option></select></label>
+        </div>
+        <div class="ctrl-row">
+          <label>書体<select id="fontSelect"><option value="mincho">明朝</option><option value="gothic">ゴシック</option></select></label>
+          <select id="fontSize" title="字級"></select>
+        </div>
+        <div id="appCredit" class="app-credit">
+          <span>v0.9</span>
+          <span>by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="pageWrap"><div id="page"></div></div>
+
+    <aside>
+      <div class="section">
+        <h2>校正ワーニング <span id="warnTotal" class="hint"></span></h2>
+        <div><button id="warnPrev">前</button> <button id="warnNext">次</button></div>
+      </div>
+      <ul id="warnList"></ul>
+    </aside>
+  </main>
+
+  <script id="worker-src" type="text/plain">
+'use strict';
+const __mods = {};
+__mods['normalize'] = (function(){ 'use strict';
+// normalize.js — 改行コード正規化（CRLF/CR -> LF）
+// 副作用なしの純粋関数。Node / ブラウザ双方から import 可能。
+
+/**
+ * 改行を LF に正規化する。
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeNewlines(text) {
+  return String(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+return { normalizeNewlines };
+})();
+
+__mods['encoding'] = (function(){ 'use strict';
+// encoding.js — 文字コード自動判定＆デコード
+// 対象: UTF-8(BOM有/無), Shift_JIS。判定不能は 'unknown'。
+
+const REPLACEMENT = '�';
+const UNKNOWN_THRESHOLD = 0.01; // 置換文字が全体の1%超なら unknown
+
+/**
+ * バイト列を判定してデコードする。
+ * @param {Uint8Array} bytes
+ * @param {string} [forced] - 'utf-8' | 'shift_jis' を強制する場合
+ * @returns {{ encoding:'utf-8'|'shift_jis'|'unknown', text:string }}
+ */
+function detectAndDecode(bytes, forced) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+
+  if (forced === 'utf-8' || forced === 'shift_jis') {
+    return { encoding: forced, text: new TextDecoder(forced).decode(stripBom(u8, forced)) };
+  }
+
+  // 1. BOM
+  if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+    return { encoding: 'utf-8', text: new TextDecoder('utf-8').decode(u8.subarray(3)) };
+  }
+
+  // 2. UTF-8 妥当性
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(u8);
+    return { encoding: 'utf-8', text };
+  } catch {
+    /* UTF-8 ではない */
+  }
+
+  // 3. Shift_JIS
+  try {
+    const text = new TextDecoder('shift_jis').decode(u8);
+    let repl = 0;
+    for (const ch of text) if (ch === REPLACEMENT) repl++;
+    if (text.length > 0 && repl / text.length > UNKNOWN_THRESHOLD) {
+      return { encoding: 'unknown', text };
+    }
+    return { encoding: 'shift_jis', text };
+  } catch {
+    return { encoding: 'unknown', text: new TextDecoder('utf-8').decode(u8) };
+  }
+}
+
+function stripBom(u8, forced) {
+  if (forced === 'utf-8' && u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+    return u8.subarray(3);
+  }
+  return u8;
+}
+
+return { detectAndDecode };
+})();
+
+__mods['kinsoku'] = (function(){ 'use strict';
+// kinsoku.js — 禁則の既定文字セット
+
+// 行頭禁則（列頭に置けない）
+const DEFAULT_KINSOKU_HEAD =
+  '、。，．・：；？！ー）」』】〕》〉｝' +
+  'ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮゝゞヽヾ々';
+
+// 行末禁則（列末に置けない）
+const DEFAULT_KINSOKU_TAIL = '（「『【〔《〈｛';
+
+/**
+ * 既定の禁則設定を Set で返す。
+ * @returns {{ head:Set<string>, tail:Set<string> }}
+ */
+function defaultKinsoku() {
+  return {
+    head: new Set(Array.from(DEFAULT_KINSOKU_HEAD)),
+    tail: new Set(Array.from(DEFAULT_KINSOKU_TAIL)),
+  };
+}
+
+return { defaultKinsoku, DEFAULT_KINSOKU_HEAD, DEFAULT_KINSOKU_TAIL };
+})();
+
+__mods['tokenizer'] = (function(){ 'use strict';
+// tokenizer.js — ストリーミング・トークナイザ（generator）
+// 全Token配列を保持しない。オフセットは正規化済み文字列上の UTF-16 位置（半開区間）。
+//
+// Token:
+//   { type:'full'|'half'|'ruby'|'newline', sourceStart, sourceEnd, text, mass,
+//     baseText?, rubyText? }
+//   full=1マス, newline=0マス, half=ceil(半角数*0.5)マス, ruby=親文字コードポイント数マス
+
+const RUBY_BAR = '｜';   // U+FF5C 全角縦棒（ルビ親文字の明示開始）
+const RUBY_OPEN = '《';  // U+300A
+const RUBY_CLOSE = '》'; // U+300B
+
+/** 半角文字か（ASCII可視+空白 / 半角カナ） */
+function isHalf(cp) {
+  return (cp >= 0x20 && cp <= 0x7e) || (cp >= 0xff61 && cp <= 0xff9f);
+}
+/** 自動ルビの親文字となる漢字か */
+function isKanji(cp) {
+  return (
+    cp === 0x3005 || // 々
+    (cp >= 0x3400 && cp <= 0x4dbf) ||
+    (cp >= 0x4e00 && cp <= 0x9fff) ||
+    (cp >= 0xf900 && cp <= 0xfaff)
+  );
+}
+/** 結合文字・異体字セレクタ（直前の基底文字へ吸収する） */
+function isCombining(cp) {
+  return (
+    (cp >= 0x0300 && cp <= 0x036f) ||
+    (cp >= 0xfe00 && cp <= 0xfe0f) ||
+    (cp >= 0xe0100 && cp <= 0xe01ef)
+  );
+}
+
+/**
+ * テキストをコードポイント＋UTF-16位置の配列へ。
+ * @param {string} text
+ * @returns {{ch:string, cp:number, start:number, end:number}[]}
+ */
+function toChars(text) {
+  const chars = [];
+  let off = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0);
+    chars.push({ ch, cp, start: off, end: off + ch.length });
+    off += ch.length;
+  }
+  return chars;
+}
+
+/**
+ * ストリーミング・トークナイズ。
+ * @param {string} text 正規化済みテキスト
+ * @returns {Generator<object>}
+ */
+function* tokenize(text) {
+  const chars = toChars(text);
+  const n = chars.length;
+  let i = 0;
+
+  while (i < n) {
+    const c = chars[i];
+
+    // 改行
+    if (c.ch === '\n') {
+      yield { type: 'newline', sourceStart: c.start, sourceEnd: c.end, text: '', mass: 0 };
+      i++;
+      continue;
+    }
+
+    // 明示ルビ ｜親《ルビ》
+    if (c.ch === RUBY_BAR) {
+      const open = findNext(chars, i + 1, RUBY_OPEN);
+      const close = open >= 0 ? findNext(chars, open + 1, RUBY_CLOSE) : -1;
+      if (open > i + 1 && close > open) {
+        const baseText = sliceText(chars, i + 1, open);
+        const rubyText = sliceText(chars, open + 1, close);
+        yield {
+          type: 'ruby',
+          sourceStart: c.start,
+          sourceEnd: chars[close].end,
+          text: baseText,
+          baseText,
+          rubyText,
+          mass: open - (i + 1), // 親文字コードポイント数
+        };
+        i = close + 1;
+        continue;
+      }
+      // 不正記法 → ｜を全角1文字として扱う（warnings が別途検出）
+      yield fullToken(c);
+      i++;
+      continue;
+    }
+
+    // 自動ルビ: 漢字ラン + 《ルビ》
+    if (isKanji(c.cp)) {
+      let j = i;
+      while (j < n && isKanji(chars[j].cp)) j++;
+      // 漢字ランの直後が 《…》 か？
+      if (j < n && chars[j].ch === RUBY_OPEN) {
+        const close = findNext(chars, j + 1, RUBY_CLOSE);
+        if (close > j) {
+          const baseText = sliceText(chars, i, j);
+          const rubyText = sliceText(chars, j + 1, close);
+          yield {
+            type: 'ruby',
+            sourceStart: c.start,
+            sourceEnd: chars[close].end,
+            text: baseText,
+            baseText,
+            rubyText,
+            mass: j - i,
+          };
+          i = close + 1;
+          continue;
+        }
+      }
+      // ルビなし漢字ラン → 1文字ずつ full
+      for (let k = i; k < j; k++) yield fullToken(chars[k]);
+      i = j;
+      continue;
+    }
+
+    // 半角ラン
+    if (isHalf(c.cp)) {
+      let j = i;
+      while (j < n && isHalf(chars[j].cp)) j++;
+      const runText = sliceText(chars, i, j);
+      const count = j - i;
+      yield {
+        type: 'half',
+        sourceStart: c.start,
+        sourceEnd: chars[j - 1].end,
+        text: runText,
+        mass: Math.ceil(count * 0.5),
+      };
+      i = j;
+      continue;
+    }
+
+    // それ以外の全角1文字（全角スペース含む）＋後続の結合文字を吸収
+    let end = c.end;
+    let j = i + 1;
+    while (j < n && isCombining(chars[j].cp)) {
+      end = chars[j].end;
+      j++;
+    }
+    yield { type: 'full', sourceStart: c.start, sourceEnd: end, text: text.slice(c.start, end), mass: 1 };
+    i = j;
+  }
+}
+
+function fullToken(c) {
+  return { type: 'full', sourceStart: c.start, sourceEnd: c.end, text: c.ch, mass: 1 };
+}
+function findNext(chars, from, target) {
+  for (let k = from; k < chars.length; k++) if (chars[k].ch === target) return k;
+  return -1;
+}
+function sliceText(chars, from, to) {
+  let s = '';
+  for (let k = from; k < to; k++) s += chars[k].ch;
+  return s;
+}
+
+/** テスト・利用側向けに配列化するヘルパ（本体は使わない） */
+function tokenizeToArray(text) {
+  return [...tokenize(text)];
+}
+
+return { tokenize, tokenizeToArray };
+})();
+
+__mods['paginator'] = (function(){ 'use strict';
+// paginator.js — ページ分割（文字数モデル・DOM非依存・半開区間）
+//
+// 入力: tokens(Generator|Array), cfg
+// 出力: Page[]  Page = { index, range:{start,end}, columns:{start,end}[] }
+//
+// 不変条件:
+//  - ページ範囲・列範囲は単調増加、隙間も重複もない
+//  - 最終ページの range.end === text.length（＝全トークンを消費）
+//  - 通常列は容量を超えない（超過はぶら下げ or 分割不能トークンの単独列のみ）
+//  - 同一入力＋同一設定 → 常に同一結果
+
+const {defaultKinsoku} = __mods['kinsoku'];
+/**
+ * @typedef {{
+ *   charsPerColumn:number, columnsPerPage:number,
+ *   kinsoku:boolean, burasage:boolean,
+ *   kinsokuHead?:Set<string>, kinsokuTail?:Set<string>
+ * }} PaginateConfig
+ */
+
+/**
+ * @param {Iterable<object>} tokens
+ * @param {PaginateConfig} cfg
+ * @returns {{index:number, range:{start:number,end:number}, columns:{start:number,end:number}[]}[]}
+ */
+function paginate(tokens, cfg) {
+  const capacity = cfg.charsPerColumn;
+  const perPage = cfg.columnsPerPage;
+  const kin = cfg.kinsoku;
+  const bura = cfg.burasage && kin;
+  const head = cfg.kinsokuHead || defaultKinsoku().head;
+  const tail = cfg.kinsokuTail || defaultKinsoku().tail;
+
+  const pages = [];
+  let pageCols = [];
+  let pageStart = null;
+
+  let colTokens = []; // 現在列に確定済みのトークン（バッファは現在列のみ）
+  let usedMass = 0;
+  let lastEnd = 0;
+
+  function pushColumn(kept) {
+    if (kept.length === 0) return;
+    const start = kept[0].sourceStart;
+    const end = kept[kept.length - 1].sourceEnd;
+    pageCols.push({ start, end });
+    if (pageStart === null) pageStart = start;
+    lastEnd = end;
+    if (pageCols.length >= perPage) flushPage(end);
+  }
+  function flushPage(end) {
+    if (pageCols.length === 0) return;
+    pages.push({ index: pages.length, range: { start: pageStart, end }, columns: pageCols });
+    pageCols = [];
+    pageStart = null;
+  }
+
+  const charOf = (t) => (t.type === 'full' ? t.text : '');
+  const isHangable = (t) => t.type === 'full' && (t.text === '、' || t.text === '。');
+
+  for (const t of tokens) {
+    // 改行: 現在列に含めて閉じる（オフセットの穴を作らない）
+    if (t.type === 'newline') {
+      colTokens.push(t);
+      pushColumn(colTokens);
+      colTokens = [];
+      usedMass = 0;
+      continue;
+    }
+
+    if (usedMass + t.mass <= capacity) {
+      colTokens.push(t);
+      usedMass += t.mass;
+      continue;
+    }
+
+    // 入りきらない
+    if (colTokens.length === 0) {
+      // 空列に対して分割不能トークンが容量超過 → 単独オーバーフロー列
+      pushColumn([t]);
+      colTokens = [];
+      usedMass = 0;
+      continue;
+    }
+
+    if (bura && isHangable(t)) {
+      // ぶら下げ: はみ出して現在列に置き、閉じる
+      colTokens.push(t);
+      pushColumn(colTokens);
+      colTokens = [];
+      usedMass = 0;
+      continue;
+    }
+
+    // t は次列へ繰り越し。禁則ONなら「最後の有効境界」を後方探索
+    let carry = [t];
+    if (kin) {
+      const keptBackup = colTokens.slice();
+      while (colTokens.length > 0) {
+        const firstCarried = carry[0];
+        const lastKept = colTokens[colTokens.length - 1];
+        const headBad = head.has(charOf(firstCarried));
+        const tailBad = tail.has(charOf(lastKept));
+        if (headBad || tailBad) {
+          carry.unshift(colTokens.pop());
+        } else break;
+      }
+      if (colTokens.length === 0) {
+        // 有効境界なし → 機械改列にフォールバック
+        colTokens = keptBackup;
+        carry = [t];
+      }
+    }
+
+    pushColumn(colTokens);
+    // 次列を carry で開始
+    colTokens = [];
+    usedMass = 0;
+    for (const c of carry) {
+      colTokens.push(c);
+      usedMass += c.mass;
+    }
+  }
+
+  // 末尾処理
+  pushColumn(colTokens);
+  flushPage(lastEnd);
+
+  if (pages.length === 0) {
+    pages.push({ index: 0, range: { start: 0, end: 0 }, columns: [] });
+  }
+  return pages;
+}
+
+/**
+ * オフセットを含むページ番号を二分探索。
+ * @param {{range:{start:number,end:number}}[]} pages
+ * @param {number} offset
+ * @returns {number}
+ */
+function pageIndexOfOffset(pages, offset) {
+  let lo = 0;
+  let hi = pages.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const r = pages[mid].range;
+    if (offset < r.start) hi = mid - 1;
+    else if (offset >= r.end && mid < pages.length - 1) lo = mid + 1;
+    else return mid;
+  }
+  return Math.max(0, Math.min(pages.length - 1, lo));
+}
+
+return { paginate, pageIndexOfOffset };
+})();
+
+__mods['warnings'] = (function(){ 'use strict';
+// warnings.js — 校正ワーニング検出
+// 位置は正規化テキスト上の UTF-16 半開区間 [start,end)。
+// 半角ラン単位で集約、見出しプレフィックス・ルビ内は半角警告から除外、severity 付き。
+
+const WARNING_LABELS = {
+  'indent-missing': '字下げ漏れ',
+  'dialog-indent': '会話文の不要な字下げ',
+  'period-before-bracket': '閉じ括弧前の句点',
+  'no-space-after-bang': '！？後のスペース不足',
+  'odd-leader-dash': '三点リーダ／ダッシュが偶数でない',
+  halfwidth: '半角文字',
+  'ruby-off': 'ルビ非表示箇所',
+  tab: 'TAB文字',
+  'trailing-space': '行末空白',
+  'halfwidth-space': '半角スペース',
+  'fullspace-only-line': '全角空白のみの行',
+  'consecutive-blank': '連続空行',
+  'ruby-syntax-error': 'ルビ構文エラー',
+};
+
+const SEVERITY = {
+  'indent-missing': 'warning',
+  'dialog-indent': 'warning',
+  'period-before-bracket': 'warning',
+  'no-space-after-bang': 'warning',
+  'odd-leader-dash': 'warning',
+  halfwidth: 'info',
+  'ruby-off': 'info',
+  tab: 'warning',
+  'trailing-space': 'warning',
+  'halfwidth-space': 'info',
+  'fullspace-only-line': 'warning',
+  'consecutive-blank': 'info',
+  'ruby-syntax-error': 'error',
+};
+
+const DEFAULT_LIMIT = 1000;
+
+/**
+ * @param {string} text
+ * @param {{ showRuby?:boolean, enabled?:Set<string>, limit?:number }} [opt]
+ * @returns {{ items:{code,label,severity,range:{start,end}}[], total:number }}
+ */
+function detectWarnings(text, opt = {}) {
+  const showRuby = opt.showRuby !== false;
+  const enabled = opt.enabled || null;
+  const limit = opt.limit || DEFAULT_LIMIT;
+  const on = (code) => (enabled ? enabled.has(code) : true);
+
+  const rubyRanges = collectRubyRanges(text);
+  const headingPrefixRanges = collectHeadingPrefixRanges(text);
+  const excluded = (pos) =>
+    inAny(rubyRanges, pos) || inAny(headingPrefixRanges, pos);
+
+  const items = [];
+  const counts = {};
+  let total = 0;
+  const add = (code, start, end, labelOverride) => {
+    total++;
+    counts[code] = (counts[code] || 0) + 1;
+    if (counts[code] <= limit) {
+      items.push({
+        code,
+        label: labelOverride || WARNING_LABELS[code],
+        severity: SEVERITY[code],
+        range: { start, end },
+      });
+    }
+  };
+
+  // 行単位（字下げ・会話字下げ・全角空白のみ行・行末空白）
+  // 行末空白の範囲は半角スペース／半角文字と二重に出さないための除外に使う
+  const trailingRanges = [];
+  let lineStart = 0;
+  const lines = text.split('\n');
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    const start = lineStart;
+    lineStart += line.length + 1; // +1 は \n
+
+    const isHeading = /^#{1,2}(?:\s|$)/.test(line);
+
+    if (on('fullspace-only-line') && line.length > 0 && /^　+$/.test(line)) {
+      add('fullspace-only-line', start, start + line.length);
+    }
+    if (on('trailing-space')) {
+      const m = /[ \t　]+$/.exec(line);
+      if (m && line.length > 0) {
+        const ts = start + m.index;
+        const te = start + line.length;
+        trailingRanges.push({ start: ts, end: te });
+        add('trailing-space', ts, te);
+      }
+    }
+    if (!isHeading && line.length > 0 && !/^[　\s]*$/.test(line)) {
+      const first = line[0];
+      if (on('dialog-indent') && line.startsWith('　「')) {
+        add('dialog-indent', start, start + 2);
+      } else if (
+        on('indent-missing') &&
+        first !== '　' &&
+        !'「『（'.includes(first) &&
+        // 行頭半角空白/TAB は halfwidth-space・tab 側を先に直す（字下げ漏れと二重・先回りしない）
+        first !== ' ' &&
+        first !== '\t'
+      ) {
+        // 一覧に行頭〜10文字程度を付けて該当行を判別しやすくする
+        const { text: head, utf16Len } = headSnippet(line, 10);
+        add(
+          'indent-missing',
+          start,
+          start + Math.max(1, utf16Len),
+          `${WARNING_LABELS['indent-missing']}　${head}`
+        );
+      }
+    }
+  }
+  trailingRanges.sort((a, b) => a.start - b.start);
+  const inTrailing = (pos) => inAny(trailingRanges, pos);
+
+  // 全体スキャン系
+  scan(text, /。[」』]/g, (m) => on('period-before-bracket') && add('period-before-bracket', m.index, m.index + m[0].length));
+  scan(text, /[！？](?=[^\s　！？」』）】〉])/g, (m) => on('no-space-after-bang') && add('no-space-after-bang', m.index, m.index + 1));
+  scan(text, /…+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
+  scan(text, /―+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
+  scan(text, /\t/g, (m) => {
+    // 行末TABは trailing-space に任せる（二重検出を避ける）
+    if (on('tab') && !inTrailing(m.index)) add('tab', m.index, m.index + 1);
+  });
+
+  // 半角ラン（見出しプレフィックス・ルビ内を除外）
+  // 優先度: 行末空白 > 半角スペース（空白のみラン） > 半角文字（非空白を含むラン）
+  // 同じ箇所を3種で重ねない。
+  scan(text, /[\x20-\x7e｡-ﾟ]+/g, (m) => {
+    if (excluded(m.index)) return;
+    const raw = m[0];
+    const base = m.index;
+    const pureWs = /^[ \t]+$/.test(raw);
+
+    if (pureWs) {
+      // 空白のみ: 行末に含まれる部分は trailing-space 済み。残りを halfwidth-space 1件にまとめる
+      if (!on('halfwidth-space')) return;
+      let i = 0;
+      while (i < raw.length) {
+        const abs = base + i;
+        if (inTrailing(abs) || raw[i] !== ' ') {
+          i++;
+          continue;
+        }
+        let j = i;
+        while (j < raw.length && raw[j] === ' ' && !inTrailing(base + j)) j++;
+        if (j > i) add('halfwidth-space', base + i, base + j);
+        i = Math.max(j, i + 1);
+      }
+      return;
+    }
+
+    // 非空白を含む半角ラン → halfwidth 1件（末尾の行末空白は範囲から除く）
+    if (on('halfwidth')) {
+      let end = base + raw.length;
+      while (end > base && inTrailing(end - 1)) end--;
+      // 除いた結果が空白だけ／空なら halfwidth は出さない
+      const body = text.slice(base, end);
+      if (body.length && /[\x21-\x7e｡-ﾟ]/.test(body)) {
+        add('halfwidth', base, end);
+      }
+    }
+    // ラン内の半角スペースは halfwidth に含めて示す（別項目にしない）
+    // ただし「半角スペース」単独検出は空白のみランに限定（上の pureWs 分岐）
+  });
+
+  // 連続空行（3行以上）
+  scan(text, /\n[ \t　]*\n[ \t　]*\n/g, (m) => on('consecutive-blank') && add('consecutive-blank', m.index, m.index + m[0].length));
+
+  // ルビ非表示
+  if (!showRuby && on('ruby-off')) {
+    for (const r of rubyRanges) add('ruby-off', r.start, r.end);
+  }
+
+  // ルビ構文エラー
+  if (on('ruby-syntax-error')) {
+    scan(text, /《》/g, (m) => add('ruby-syntax-error', m.index, m.index + 2));
+    scan(text, /《[^》\n]*(?:\n|$)/g, (m) => add('ruby-syntax-error', m.index, m.index + 1));
+    scan(text, /｜(?![^《\n]*《)/g, (m) => add('ruby-syntax-error', m.index, m.index + 1));
+  }
+
+  items.sort((a, b) => {
+    const ds = a.range.start - b.range.start;
+    if (ds) return ds;
+    // 同一開始位置: 狭い範囲（より局所的）を先に
+    const da = a.range.end - a.range.start;
+    const db = b.range.end - b.range.start;
+    if (da !== db) return da - db;
+    return warnCodeOrder(a.code) - warnCodeOrder(b.code);
+  });
+  return { items, total };
+}
+
+/** 同一オフセット時の表示・移動順（小さいほど先） */
+function warnCodeOrder(code) {
+  const order = {
+    'ruby-syntax-error': 10,
+    tab: 20,
+    'halfwidth-space': 30,
+    halfwidth: 40,
+    'trailing-space': 50,
+    'period-before-bracket': 60,
+    'no-space-after-bang': 70,
+    'odd-leader-dash': 80,
+    'dialog-indent': 90,
+    'indent-missing': 100,
+    'fullspace-only-line': 110,
+    'consecutive-blank': 120,
+    'ruby-off': 130,
+  };
+  return order[code] ?? 500;
+}
+
+function scan(text, re, cb) {
+  re.lastIndex = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    cb(m);
+    if (m.index === re.lastIndex) re.lastIndex++; // 空マッチ対策
+  }
+}
+
+function collectRubyRanges(text) {
+  const ranges = [];
+  scan(text, /｜[^《\n]*《[^》\n]*》/g, (m) => ranges.push({ start: m.index, end: m.index + m[0].length }));
+  scan(text, /[㐀-䶿一-鿿々]+《[^》\n]*》/g, (m) => ranges.push({ start: m.index, end: m.index + m[0].length }));
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function collectHeadingPrefixRanges(text) {
+  const ranges = [];
+  let lineStart = 0;
+  for (const line of text.split('\n')) {
+    const m = /^#{1,2}\s?/.exec(line);
+    if (m) ranges.push({ start: lineStart, end: lineStart + m[0].length });
+    lineStart += line.length + 1;
+  }
+  return ranges;
+}
+
+function inAny(ranges, pos) {
+  for (const r of ranges) {
+    if (pos >= r.start && pos < r.end) return true;
+    if (r.start > pos) break;
+  }
+  return false;
+}
+
+/** 行頭から最大 n コードポイントを切り出し、長い場合は … を付ける */
+function headSnippet(line, n) {
+  let text = '';
+  let count = 0;
+  let utf16Len = 0;
+  for (const ch of line) {
+    text += ch;
+    utf16Len += ch.length;
+    count++;
+    if (count >= n) break;
+  }
+  let more = false;
+  let seen = 0;
+  for (const _ of line) {
+    seen++;
+    if (seen > n) {
+      more = true;
+      break;
+    }
+  }
+  if (more) text += '…';
+  return { text, utf16Len };
+}
+
+return { detectWarnings, WARNING_LABELS };
+})();
+
+__mods['search'] = (function(){ 'use strict';
+// search.js — 全文・見出し検索（UTF-16 半開区間）
+
+/**
+ * 全一致検索（大小文字区別）。
+ * @param {string} text
+ * @param {string} query
+ * @param {{ headingOnly?:boolean, limit?:number }} [opt]
+ * @returns {{ matches:{start:number,end:number}[], total:number }}
+ */
+function searchAll(text, query, opt = {}) {
+  const matches = [];
+  let total = 0;
+  const limit = opt.limit || 5000;
+  if (!query) return { matches, total: 0 };
+
+  if (opt.headingOnly) {
+    let lineStart = 0;
+    for (const line of text.split('\n')) {
+      if (/^#{1,2}(?:\s|$)/.test(line)) {
+        collect(line, query, lineStart, matches, () => total++, limit);
+      }
+      lineStart += line.length + 1;
+    }
+    return { matches, total };
+  }
+
+  collect(text, query, 0, matches, () => total++, limit);
+  return { matches, total };
+}
+
+function collect(hay, needle, base, out, inc, limit) {
+  let from = 0;
+  let idx;
+  while ((idx = hay.indexOf(needle, from)) !== -1) {
+    inc();
+    if (out.length < limit) out.push({ start: base + idx, end: base + idx + needle.length });
+    from = idx + needle.length;
+  }
+}
+
+return { searchAll };
+})();
+
+__mods['position'] = (function(){ 'use strict';
+// position.js — 現在位置の保存・復帰（純粋ロジック）
+// オフセットは UTF-16。周辺文字列 before/after の両一致を優先してスコアリング。
+
+const CONTEXT = 20;
+const WINDOW = 2000;
+
+/**
+ * 保存用レコードを作る。
+ * @param {string} text @param {number} offset
+ */
+function makeRecord(text, offset) {
+  const o = clamp(offset, 0, text.length);
+  return {
+    offset: o,
+    previousLength: text.length,
+    before: text.slice(Math.max(0, o - CONTEXT), o),
+    after: text.slice(o, Math.min(text.length, o + CONTEXT)),
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * 保存レコードから現在テキスト上の復帰オフセットを求める。
+ * @param {string} text @param {{offset,before,after}} rec
+ * @returns {number}
+ */
+function restoreOffset(text, rec) {
+  if (!rec) return 0;
+  const anchor = clamp(rec.offset, 0, text.length);
+  const lo = Math.max(0, anchor - WINDOW);
+  const hi = Math.min(text.length, anchor + WINDOW);
+  const region = text.slice(lo, hi);
+
+  const candidates = [];
+  // before+after 両一致（before の直後に after が続く位置）
+  if (rec.before || rec.after) {
+    const combo = rec.before + rec.after;
+    if (combo) {
+      pushAll(region, combo, lo + rec.before.length, candidates, 3);
+    }
+  }
+  if (rec.after) pushAll(region, rec.after, lo, candidates, 2);
+  if (rec.before) {
+    // before 一致は before の直後を復帰点とする
+    let idx = -1;
+    while ((idx = region.indexOf(rec.before, idx + 1)) !== -1) {
+      candidates.push({ pos: lo + idx + rec.before.length, score: 1 });
+    }
+  }
+
+  if (candidates.length === 0) return anchor;
+  candidates.sort((a, b) => b.score - a.score || Math.abs(a.pos - anchor) - Math.abs(b.pos - anchor));
+  return candidates[0].pos;
+}
+
+function pushAll(region, needle, offsetIntoMatch, out, score) {
+  let idx = -1;
+  while ((idx = region.indexOf(needle, idx + 1)) !== -1) {
+    out.push({ pos: idx + offsetIntoMatch, score });
+  }
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+return { makeRecord, restoreOffset };
+})();
+
+(function(){ 'use strict';
+// worker.js — 重い処理を担う Web Worker。documentId/requestId で世代管理。
+const {detectAndDecode} = __mods['encoding'];
+const {normalizeNewlines} = __mods['normalize'];
+const {tokenize} = __mods['tokenizer'];
+const {paginate} = __mods['paginator'];
+const {detectWarnings} = __mods['warnings'];
+const {searchAll} = __mods['search'];
+const {defaultKinsoku} = __mods['kinsoku'];
+let currentText = '';
+let currentDocId = null;
+
+self.onmessage = (e) => {
+  const msg = e.data || {};
+  const { documentId, requestId, type, payload } = msg;
+
+  try {
+    if (type === 'load') {
+      const { encoding, text } = detectAndDecode(payload.bytes, payload.forcedEncoding);
+      if (encoding === 'unknown' && !payload.forcedEncoding) {
+        post({ documentId, requestId, type: 'needEncoding', payload: {} });
+        return;
+      }
+      const newline = detectNewline(text);
+      currentText = normalizeNewlines(text);
+      currentDocId = documentId;
+      post({ documentId, requestId, type: 'loaded', payload: { encoding, newline, charCount: currentText.length, text: currentText } });
+      return;
+    }
+
+    if (type === 'paginate') {
+      if (documentId !== currentDocId) return;
+      const cfg = buildConfig(payload.config);
+      const pages = paginate(tokenize(currentText), cfg);
+      post({ documentId, requestId, type: 'paginated', payload: { pages } });
+      return;
+    }
+
+    if (type === 'detectWarnings') {
+      if (documentId !== currentDocId) return;
+      const { items, total } = detectWarnings(currentText, {
+        showRuby: payload.showRuby,
+        enabled: payload.enabled ? new Set(payload.enabled) : null,
+      });
+      post({ documentId, requestId, type: 'warnings', payload: { items, total } });
+      return;
+    }
+
+    if (type === 'search') {
+      if (documentId !== currentDocId) return;
+      const { matches, total } = searchAll(currentText, payload.query, { headingOnly: payload.headingOnly });
+      post({ documentId, requestId, type: 'searchResult', payload: { matches, total } });
+      return;
+    }
+  } catch (err) {
+    post({ documentId, requestId, type: 'error', payload: { message: String(err && err.message || err) } });
+  }
+};
+
+function detectNewline(raw) {
+  const crlf = (raw.match(/\r\n/g) || []).length;
+  const cr = (raw.match(/\r(?!\n)/g) || []).length;
+  const lf = (raw.match(/(?<!\r)\n/g) || []).length;
+  const kinds = [];
+  if (crlf) kinds.push('CRLF');
+  if (cr) kinds.push('CR');
+  if (lf) kinds.push('LF');
+  if (kinds.length === 0) return 'なし';
+  if (kinds.length > 1) return '混在(' + kinds.join('/') + ')';
+  return kinds[0];
+}
+
+function buildConfig(c) {
+  const def = defaultKinsoku();
+  return {
+    charsPerColumn: c.charsPerColumn,
+    columnsPerPage: c.columnsPerPage,
+    kinsoku: c.kinsoku,
+    burasage: c.burasage,
+    kinsokuHead: c.kinsokuHead ? new Set(c.kinsokuHead) : def.head,
+    kinsokuTail: c.kinsokuTail ? new Set(c.kinsokuTail) : def.tail,
+  };
+}
+
+function post(m) {
+  self.postMessage(m);
+}
+
+})();
+
+</script>
+<script>
+window.__createWorker = function(){
+  var s = document.getElementById('worker-src').textContent;
+  return new Worker(URL.createObjectURL(new Blob([s], { type: 'text/javascript' })));
+};
+const __mods = {};
+__mods['normalize'] = (function(){ 'use strict';
+// normalize.js — 改行コード正規化（CRLF/CR -> LF）
+// 副作用なしの純粋関数。Node / ブラウザ双方から import 可能。
+
+/**
+ * 改行を LF に正規化する。
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeNewlines(text) {
+  return String(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+return { normalizeNewlines };
+})();
+
+__mods['encoding'] = (function(){ 'use strict';
+// encoding.js — 文字コード自動判定＆デコード
+// 対象: UTF-8(BOM有/無), Shift_JIS。判定不能は 'unknown'。
+
+const REPLACEMENT = '�';
+const UNKNOWN_THRESHOLD = 0.01; // 置換文字が全体の1%超なら unknown
+
+/**
+ * バイト列を判定してデコードする。
+ * @param {Uint8Array} bytes
+ * @param {string} [forced] - 'utf-8' | 'shift_jis' を強制する場合
+ * @returns {{ encoding:'utf-8'|'shift_jis'|'unknown', text:string }}
+ */
+function detectAndDecode(bytes, forced) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+
+  if (forced === 'utf-8' || forced === 'shift_jis') {
+    return { encoding: forced, text: new TextDecoder(forced).decode(stripBom(u8, forced)) };
+  }
+
+  // 1. BOM
+  if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+    return { encoding: 'utf-8', text: new TextDecoder('utf-8').decode(u8.subarray(3)) };
+  }
+
+  // 2. UTF-8 妥当性
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(u8);
+    return { encoding: 'utf-8', text };
+  } catch {
+    /* UTF-8 ではない */
+  }
+
+  // 3. Shift_JIS
+  try {
+    const text = new TextDecoder('shift_jis').decode(u8);
+    let repl = 0;
+    for (const ch of text) if (ch === REPLACEMENT) repl++;
+    if (text.length > 0 && repl / text.length > UNKNOWN_THRESHOLD) {
+      return { encoding: 'unknown', text };
+    }
+    return { encoding: 'shift_jis', text };
+  } catch {
+    return { encoding: 'unknown', text: new TextDecoder('utf-8').decode(u8) };
+  }
+}
+
+function stripBom(u8, forced) {
+  if (forced === 'utf-8' && u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+    return u8.subarray(3);
+  }
+  return u8;
+}
+
+return { detectAndDecode };
+})();
+
+__mods['kinsoku'] = (function(){ 'use strict';
+// kinsoku.js — 禁則の既定文字セット
+
+// 行頭禁則（列頭に置けない）
+const DEFAULT_KINSOKU_HEAD =
+  '、。，．・：；？！ー）」』】〕》〉｝' +
+  'ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮゝゞヽヾ々';
+
+// 行末禁則（列末に置けない）
+const DEFAULT_KINSOKU_TAIL = '（「『【〔《〈｛';
+
+/**
+ * 既定の禁則設定を Set で返す。
+ * @returns {{ head:Set<string>, tail:Set<string> }}
+ */
+function defaultKinsoku() {
+  return {
+    head: new Set(Array.from(DEFAULT_KINSOKU_HEAD)),
+    tail: new Set(Array.from(DEFAULT_KINSOKU_TAIL)),
+  };
+}
+
+return { defaultKinsoku, DEFAULT_KINSOKU_HEAD, DEFAULT_KINSOKU_TAIL };
+})();
+
+__mods['tokenizer'] = (function(){ 'use strict';
+// tokenizer.js — ストリーミング・トークナイザ（generator）
+// 全Token配列を保持しない。オフセットは正規化済み文字列上の UTF-16 位置（半開区間）。
+//
+// Token:
+//   { type:'full'|'half'|'ruby'|'newline', sourceStart, sourceEnd, text, mass,
+//     baseText?, rubyText? }
+//   full=1マス, newline=0マス, half=ceil(半角数*0.5)マス, ruby=親文字コードポイント数マス
+
+const RUBY_BAR = '｜';   // U+FF5C 全角縦棒（ルビ親文字の明示開始）
+const RUBY_OPEN = '《';  // U+300A
+const RUBY_CLOSE = '》'; // U+300B
+
+/** 半角文字か（ASCII可視+空白 / 半角カナ） */
+function isHalf(cp) {
+  return (cp >= 0x20 && cp <= 0x7e) || (cp >= 0xff61 && cp <= 0xff9f);
+}
+/** 自動ルビの親文字となる漢字か */
+function isKanji(cp) {
+  return (
+    cp === 0x3005 || // 々
+    (cp >= 0x3400 && cp <= 0x4dbf) ||
+    (cp >= 0x4e00 && cp <= 0x9fff) ||
+    (cp >= 0xf900 && cp <= 0xfaff)
+  );
+}
+/** 結合文字・異体字セレクタ（直前の基底文字へ吸収する） */
+function isCombining(cp) {
+  return (
+    (cp >= 0x0300 && cp <= 0x036f) ||
+    (cp >= 0xfe00 && cp <= 0xfe0f) ||
+    (cp >= 0xe0100 && cp <= 0xe01ef)
+  );
+}
+
+/**
+ * テキストをコードポイント＋UTF-16位置の配列へ。
+ * @param {string} text
+ * @returns {{ch:string, cp:number, start:number, end:number}[]}
+ */
+function toChars(text) {
+  const chars = [];
+  let off = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0);
+    chars.push({ ch, cp, start: off, end: off + ch.length });
+    off += ch.length;
+  }
+  return chars;
+}
+
+/**
+ * ストリーミング・トークナイズ。
+ * @param {string} text 正規化済みテキスト
+ * @returns {Generator<object>}
+ */
+function* tokenize(text) {
+  const chars = toChars(text);
+  const n = chars.length;
+  let i = 0;
+
+  while (i < n) {
+    const c = chars[i];
+
+    // 改行
+    if (c.ch === '\n') {
+      yield { type: 'newline', sourceStart: c.start, sourceEnd: c.end, text: '', mass: 0 };
+      i++;
+      continue;
+    }
+
+    // 明示ルビ ｜親《ルビ》
+    if (c.ch === RUBY_BAR) {
+      const open = findNext(chars, i + 1, RUBY_OPEN);
+      const close = open >= 0 ? findNext(chars, open + 1, RUBY_CLOSE) : -1;
+      if (open > i + 1 && close > open) {
+        const baseText = sliceText(chars, i + 1, open);
+        const rubyText = sliceText(chars, open + 1, close);
+        yield {
+          type: 'ruby',
+          sourceStart: c.start,
+          sourceEnd: chars[close].end,
+          text: baseText,
+          baseText,
+          rubyText,
+          mass: open - (i + 1), // 親文字コードポイント数
+        };
+        i = close + 1;
+        continue;
+      }
+      // 不正記法 → ｜を全角1文字として扱う（warnings が別途検出）
+      yield fullToken(c);
+      i++;
+      continue;
+    }
+
+    // 自動ルビ: 漢字ラン + 《ルビ》
+    if (isKanji(c.cp)) {
+      let j = i;
+      while (j < n && isKanji(chars[j].cp)) j++;
+      // 漢字ランの直後が 《…》 か？
+      if (j < n && chars[j].ch === RUBY_OPEN) {
+        const close = findNext(chars, j + 1, RUBY_CLOSE);
+        if (close > j) {
+          const baseText = sliceText(chars, i, j);
+          const rubyText = sliceText(chars, j + 1, close);
+          yield {
+            type: 'ruby',
+            sourceStart: c.start,
+            sourceEnd: chars[close].end,
+            text: baseText,
+            baseText,
+            rubyText,
+            mass: j - i,
+          };
+          i = close + 1;
+          continue;
+        }
+      }
+      // ルビなし漢字ラン → 1文字ずつ full
+      for (let k = i; k < j; k++) yield fullToken(chars[k]);
+      i = j;
+      continue;
+    }
+
+    // 半角ラン
+    if (isHalf(c.cp)) {
+      let j = i;
+      while (j < n && isHalf(chars[j].cp)) j++;
+      const runText = sliceText(chars, i, j);
+      const count = j - i;
+      yield {
+        type: 'half',
+        sourceStart: c.start,
+        sourceEnd: chars[j - 1].end,
+        text: runText,
+        mass: Math.ceil(count * 0.5),
+      };
+      i = j;
+      continue;
+    }
+
+    // それ以外の全角1文字（全角スペース含む）＋後続の結合文字を吸収
+    let end = c.end;
+    let j = i + 1;
+    while (j < n && isCombining(chars[j].cp)) {
+      end = chars[j].end;
+      j++;
+    }
+    yield { type: 'full', sourceStart: c.start, sourceEnd: end, text: text.slice(c.start, end), mass: 1 };
+    i = j;
+  }
+}
+
+function fullToken(c) {
+  return { type: 'full', sourceStart: c.start, sourceEnd: c.end, text: c.ch, mass: 1 };
+}
+function findNext(chars, from, target) {
+  for (let k = from; k < chars.length; k++) if (chars[k].ch === target) return k;
+  return -1;
+}
+function sliceText(chars, from, to) {
+  let s = '';
+  for (let k = from; k < to; k++) s += chars[k].ch;
+  return s;
+}
+
+/** テスト・利用側向けに配列化するヘルパ（本体は使わない） */
+function tokenizeToArray(text) {
+  return [...tokenize(text)];
+}
+
+return { tokenize, tokenizeToArray };
+})();
+
+__mods['paginator'] = (function(){ 'use strict';
+// paginator.js — ページ分割（文字数モデル・DOM非依存・半開区間）
+//
+// 入力: tokens(Generator|Array), cfg
+// 出力: Page[]  Page = { index, range:{start,end}, columns:{start,end}[] }
+//
+// 不変条件:
+//  - ページ範囲・列範囲は単調増加、隙間も重複もない
+//  - 最終ページの range.end === text.length（＝全トークンを消費）
+//  - 通常列は容量を超えない（超過はぶら下げ or 分割不能トークンの単独列のみ）
+//  - 同一入力＋同一設定 → 常に同一結果
+
+const {defaultKinsoku} = __mods['kinsoku'];
+/**
+ * @typedef {{
+ *   charsPerColumn:number, columnsPerPage:number,
+ *   kinsoku:boolean, burasage:boolean,
+ *   kinsokuHead?:Set<string>, kinsokuTail?:Set<string>
+ * }} PaginateConfig
+ */
+
+/**
+ * @param {Iterable<object>} tokens
+ * @param {PaginateConfig} cfg
+ * @returns {{index:number, range:{start:number,end:number}, columns:{start:number,end:number}[]}[]}
+ */
+function paginate(tokens, cfg) {
+  const capacity = cfg.charsPerColumn;
+  const perPage = cfg.columnsPerPage;
+  const kin = cfg.kinsoku;
+  const bura = cfg.burasage && kin;
+  const head = cfg.kinsokuHead || defaultKinsoku().head;
+  const tail = cfg.kinsokuTail || defaultKinsoku().tail;
+
+  const pages = [];
+  let pageCols = [];
+  let pageStart = null;
+
+  let colTokens = []; // 現在列に確定済みのトークン（バッファは現在列のみ）
+  let usedMass = 0;
+  let lastEnd = 0;
+
+  function pushColumn(kept) {
+    if (kept.length === 0) return;
+    const start = kept[0].sourceStart;
+    const end = kept[kept.length - 1].sourceEnd;
+    pageCols.push({ start, end });
+    if (pageStart === null) pageStart = start;
+    lastEnd = end;
+    if (pageCols.length >= perPage) flushPage(end);
+  }
+  function flushPage(end) {
+    if (pageCols.length === 0) return;
+    pages.push({ index: pages.length, range: { start: pageStart, end }, columns: pageCols });
+    pageCols = [];
+    pageStart = null;
+  }
+
+  const charOf = (t) => (t.type === 'full' ? t.text : '');
+  const isHangable = (t) => t.type === 'full' && (t.text === '、' || t.text === '。');
+
+  for (const t of tokens) {
+    // 改行: 現在列に含めて閉じる（オフセットの穴を作らない）
+    if (t.type === 'newline') {
+      colTokens.push(t);
+      pushColumn(colTokens);
+      colTokens = [];
+      usedMass = 0;
+      continue;
+    }
+
+    if (usedMass + t.mass <= capacity) {
+      colTokens.push(t);
+      usedMass += t.mass;
+      continue;
+    }
+
+    // 入りきらない
+    if (colTokens.length === 0) {
+      // 空列に対して分割不能トークンが容量超過 → 単独オーバーフロー列
+      pushColumn([t]);
+      colTokens = [];
+      usedMass = 0;
+      continue;
+    }
+
+    if (bura && isHangable(t)) {
+      // ぶら下げ: はみ出して現在列に置き、閉じる
+      colTokens.push(t);
+      pushColumn(colTokens);
+      colTokens = [];
+      usedMass = 0;
+      continue;
+    }
+
+    // t は次列へ繰り越し。禁則ONなら「最後の有効境界」を後方探索
+    let carry = [t];
+    if (kin) {
+      const keptBackup = colTokens.slice();
+      while (colTokens.length > 0) {
+        const firstCarried = carry[0];
+        const lastKept = colTokens[colTokens.length - 1];
+        const headBad = head.has(charOf(firstCarried));
+        const tailBad = tail.has(charOf(lastKept));
+        if (headBad || tailBad) {
+          carry.unshift(colTokens.pop());
+        } else break;
+      }
+      if (colTokens.length === 0) {
+        // 有効境界なし → 機械改列にフォールバック
+        colTokens = keptBackup;
+        carry = [t];
+      }
+    }
+
+    pushColumn(colTokens);
+    // 次列を carry で開始
+    colTokens = [];
+    usedMass = 0;
+    for (const c of carry) {
+      colTokens.push(c);
+      usedMass += c.mass;
+    }
+  }
+
+  // 末尾処理
+  pushColumn(colTokens);
+  flushPage(lastEnd);
+
+  if (pages.length === 0) {
+    pages.push({ index: 0, range: { start: 0, end: 0 }, columns: [] });
+  }
+  return pages;
+}
+
+/**
+ * オフセットを含むページ番号を二分探索。
+ * @param {{range:{start:number,end:number}}[]} pages
+ * @param {number} offset
+ * @returns {number}
+ */
+function pageIndexOfOffset(pages, offset) {
+  let lo = 0;
+  let hi = pages.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const r = pages[mid].range;
+    if (offset < r.start) hi = mid - 1;
+    else if (offset >= r.end && mid < pages.length - 1) lo = mid + 1;
+    else return mid;
+  }
+  return Math.max(0, Math.min(pages.length - 1, lo));
+}
+
+return { paginate, pageIndexOfOffset };
+})();
+
+__mods['warnings'] = (function(){ 'use strict';
+// warnings.js — 校正ワーニング検出
+// 位置は正規化テキスト上の UTF-16 半開区間 [start,end)。
+// 半角ラン単位で集約、見出しプレフィックス・ルビ内は半角警告から除外、severity 付き。
+
+const WARNING_LABELS = {
+  'indent-missing': '字下げ漏れ',
+  'dialog-indent': '会話文の不要な字下げ',
+  'period-before-bracket': '閉じ括弧前の句点',
+  'no-space-after-bang': '！？後のスペース不足',
+  'odd-leader-dash': '三点リーダ／ダッシュが偶数でない',
+  halfwidth: '半角文字',
+  'ruby-off': 'ルビ非表示箇所',
+  tab: 'TAB文字',
+  'trailing-space': '行末空白',
+  'halfwidth-space': '半角スペース',
+  'fullspace-only-line': '全角空白のみの行',
+  'consecutive-blank': '連続空行',
+  'ruby-syntax-error': 'ルビ構文エラー',
+};
+
+const SEVERITY = {
+  'indent-missing': 'warning',
+  'dialog-indent': 'warning',
+  'period-before-bracket': 'warning',
+  'no-space-after-bang': 'warning',
+  'odd-leader-dash': 'warning',
+  halfwidth: 'info',
+  'ruby-off': 'info',
+  tab: 'warning',
+  'trailing-space': 'warning',
+  'halfwidth-space': 'info',
+  'fullspace-only-line': 'warning',
+  'consecutive-blank': 'info',
+  'ruby-syntax-error': 'error',
+};
+
+const DEFAULT_LIMIT = 1000;
+
+/**
+ * @param {string} text
+ * @param {{ showRuby?:boolean, enabled?:Set<string>, limit?:number }} [opt]
+ * @returns {{ items:{code,label,severity,range:{start,end}}[], total:number }}
+ */
+function detectWarnings(text, opt = {}) {
+  const showRuby = opt.showRuby !== false;
+  const enabled = opt.enabled || null;
+  const limit = opt.limit || DEFAULT_LIMIT;
+  const on = (code) => (enabled ? enabled.has(code) : true);
+
+  const rubyRanges = collectRubyRanges(text);
+  const headingPrefixRanges = collectHeadingPrefixRanges(text);
+  const excluded = (pos) =>
+    inAny(rubyRanges, pos) || inAny(headingPrefixRanges, pos);
+
+  const items = [];
+  const counts = {};
+  let total = 0;
+  const add = (code, start, end, labelOverride) => {
+    total++;
+    counts[code] = (counts[code] || 0) + 1;
+    if (counts[code] <= limit) {
+      items.push({
+        code,
+        label: labelOverride || WARNING_LABELS[code],
+        severity: SEVERITY[code],
+        range: { start, end },
+      });
+    }
+  };
+
+  // 行単位（字下げ・会話字下げ・全角空白のみ行・行末空白）
+  // 行末空白の範囲は半角スペース／半角文字と二重に出さないための除外に使う
+  const trailingRanges = [];
+  let lineStart = 0;
+  const lines = text.split('\n');
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    const start = lineStart;
+    lineStart += line.length + 1; // +1 は \n
+
+    const isHeading = /^#{1,2}(?:\s|$)/.test(line);
+
+    if (on('fullspace-only-line') && line.length > 0 && /^　+$/.test(line)) {
+      add('fullspace-only-line', start, start + line.length);
+    }
+    if (on('trailing-space')) {
+      const m = /[ \t　]+$/.exec(line);
+      if (m && line.length > 0) {
+        const ts = start + m.index;
+        const te = start + line.length;
+        trailingRanges.push({ start: ts, end: te });
+        add('trailing-space', ts, te);
+      }
+    }
+    if (!isHeading && line.length > 0 && !/^[　\s]*$/.test(line)) {
+      const first = line[0];
+      if (on('dialog-indent') && line.startsWith('　「')) {
+        add('dialog-indent', start, start + 2);
+      } else if (
+        on('indent-missing') &&
+        first !== '　' &&
+        !'「『（'.includes(first) &&
+        // 行頭半角空白/TAB は halfwidth-space・tab 側を先に直す（字下げ漏れと二重・先回りしない）
+        first !== ' ' &&
+        first !== '\t'
+      ) {
+        // 一覧に行頭〜10文字程度を付けて該当行を判別しやすくする
+        const { text: head, utf16Len } = headSnippet(line, 10);
+        add(
+          'indent-missing',
+          start,
+          start + Math.max(1, utf16Len),
+          `${WARNING_LABELS['indent-missing']}　${head}`
+        );
+      }
+    }
+  }
+  trailingRanges.sort((a, b) => a.start - b.start);
+  const inTrailing = (pos) => inAny(trailingRanges, pos);
+
+  // 全体スキャン系
+  scan(text, /。[」』]/g, (m) => on('period-before-bracket') && add('period-before-bracket', m.index, m.index + m[0].length));
+  scan(text, /[！？](?=[^\s　！？」』）】〉])/g, (m) => on('no-space-after-bang') && add('no-space-after-bang', m.index, m.index + 1));
+  scan(text, /…+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
+  scan(text, /―+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
+  scan(text, /\t/g, (m) => {
+    // 行末TABは trailing-space に任せる（二重検出を避ける）
+    if (on('tab') && !inTrailing(m.index)) add('tab', m.index, m.index + 1);
+  });
+
+  // 半角ラン（見出しプレフィックス・ルビ内を除外）
+  // 優先度: 行末空白 > 半角スペース（空白のみラン） > 半角文字（非空白を含むラン）
+  // 同じ箇所を3種で重ねない。
+  scan(text, /[\x20-\x7e｡-ﾟ]+/g, (m) => {
+    if (excluded(m.index)) return;
+    const raw = m[0];
+    const base = m.index;
+    const pureWs = /^[ \t]+$/.test(raw);
+
+    if (pureWs) {
+      // 空白のみ: 行末に含まれる部分は trailing-space 済み。残りを halfwidth-space 1件にまとめる
+      if (!on('halfwidth-space')) return;
+      let i = 0;
+      while (i < raw.length) {
+        const abs = base + i;
+        if (inTrailing(abs) || raw[i] !== ' ') {
+          i++;
+          continue;
+        }
+        let j = i;
+        while (j < raw.length && raw[j] === ' ' && !inTrailing(base + j)) j++;
+        if (j > i) add('halfwidth-space', base + i, base + j);
+        i = Math.max(j, i + 1);
+      }
+      return;
+    }
+
+    // 非空白を含む半角ラン → halfwidth 1件（末尾の行末空白は範囲から除く）
+    if (on('halfwidth')) {
+      let end = base + raw.length;
+      while (end > base && inTrailing(end - 1)) end--;
+      // 除いた結果が空白だけ／空なら halfwidth は出さない
+      const body = text.slice(base, end);
+      if (body.length && /[\x21-\x7e｡-ﾟ]/.test(body)) {
+        add('halfwidth', base, end);
+      }
+    }
+    // ラン内の半角スペースは halfwidth に含めて示す（別項目にしない）
+    // ただし「半角スペース」単独検出は空白のみランに限定（上の pureWs 分岐）
+  });
+
+  // 連続空行（3行以上）
+  scan(text, /\n[ \t　]*\n[ \t　]*\n/g, (m) => on('consecutive-blank') && add('consecutive-blank', m.index, m.index + m[0].length));
+
+  // ルビ非表示
+  if (!showRuby && on('ruby-off')) {
+    for (const r of rubyRanges) add('ruby-off', r.start, r.end);
+  }
+
+  // ルビ構文エラー
+  if (on('ruby-syntax-error')) {
+    scan(text, /《》/g, (m) => add('ruby-syntax-error', m.index, m.index + 2));
+    scan(text, /《[^》\n]*(?:\n|$)/g, (m) => add('ruby-syntax-error', m.index, m.index + 1));
+    scan(text, /｜(?![^《\n]*《)/g, (m) => add('ruby-syntax-error', m.index, m.index + 1));
+  }
+
+  items.sort((a, b) => {
+    const ds = a.range.start - b.range.start;
+    if (ds) return ds;
+    // 同一開始位置: 狭い範囲（より局所的）を先に
+    const da = a.range.end - a.range.start;
+    const db = b.range.end - b.range.start;
+    if (da !== db) return da - db;
+    return warnCodeOrder(a.code) - warnCodeOrder(b.code);
+  });
+  return { items, total };
+}
+
+/** 同一オフセット時の表示・移動順（小さいほど先） */
+function warnCodeOrder(code) {
+  const order = {
+    'ruby-syntax-error': 10,
+    tab: 20,
+    'halfwidth-space': 30,
+    halfwidth: 40,
+    'trailing-space': 50,
+    'period-before-bracket': 60,
+    'no-space-after-bang': 70,
+    'odd-leader-dash': 80,
+    'dialog-indent': 90,
+    'indent-missing': 100,
+    'fullspace-only-line': 110,
+    'consecutive-blank': 120,
+    'ruby-off': 130,
+  };
+  return order[code] ?? 500;
+}
+
+function scan(text, re, cb) {
+  re.lastIndex = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    cb(m);
+    if (m.index === re.lastIndex) re.lastIndex++; // 空マッチ対策
+  }
+}
+
+function collectRubyRanges(text) {
+  const ranges = [];
+  scan(text, /｜[^《\n]*《[^》\n]*》/g, (m) => ranges.push({ start: m.index, end: m.index + m[0].length }));
+  scan(text, /[㐀-䶿一-鿿々]+《[^》\n]*》/g, (m) => ranges.push({ start: m.index, end: m.index + m[0].length }));
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function collectHeadingPrefixRanges(text) {
+  const ranges = [];
+  let lineStart = 0;
+  for (const line of text.split('\n')) {
+    const m = /^#{1,2}\s?/.exec(line);
+    if (m) ranges.push({ start: lineStart, end: lineStart + m[0].length });
+    lineStart += line.length + 1;
+  }
+  return ranges;
+}
+
+function inAny(ranges, pos) {
+  for (const r of ranges) {
+    if (pos >= r.start && pos < r.end) return true;
+    if (r.start > pos) break;
+  }
+  return false;
+}
+
+/** 行頭から最大 n コードポイントを切り出し、長い場合は … を付ける */
+function headSnippet(line, n) {
+  let text = '';
+  let count = 0;
+  let utf16Len = 0;
+  for (const ch of line) {
+    text += ch;
+    utf16Len += ch.length;
+    count++;
+    if (count >= n) break;
+  }
+  let more = false;
+  let seen = 0;
+  for (const _ of line) {
+    seen++;
+    if (seen > n) {
+      more = true;
+      break;
+    }
+  }
+  if (more) text += '…';
+  return { text, utf16Len };
+}
+
+return { detectWarnings, WARNING_LABELS };
+})();
+
+__mods['search'] = (function(){ 'use strict';
+// search.js — 全文・見出し検索（UTF-16 半開区間）
+
+/**
+ * 全一致検索（大小文字区別）。
+ * @param {string} text
+ * @param {string} query
+ * @param {{ headingOnly?:boolean, limit?:number }} [opt]
+ * @returns {{ matches:{start:number,end:number}[], total:number }}
+ */
+function searchAll(text, query, opt = {}) {
+  const matches = [];
+  let total = 0;
+  const limit = opt.limit || 5000;
+  if (!query) return { matches, total: 0 };
+
+  if (opt.headingOnly) {
+    let lineStart = 0;
+    for (const line of text.split('\n')) {
+      if (/^#{1,2}(?:\s|$)/.test(line)) {
+        collect(line, query, lineStart, matches, () => total++, limit);
+      }
+      lineStart += line.length + 1;
+    }
+    return { matches, total };
+  }
+
+  collect(text, query, 0, matches, () => total++, limit);
+  return { matches, total };
+}
+
+function collect(hay, needle, base, out, inc, limit) {
+  let from = 0;
+  let idx;
+  while ((idx = hay.indexOf(needle, from)) !== -1) {
+    inc();
+    if (out.length < limit) out.push({ start: base + idx, end: base + idx + needle.length });
+    from = idx + needle.length;
+  }
+}
+
+return { searchAll };
+})();
+
+__mods['position'] = (function(){ 'use strict';
+// position.js — 現在位置の保存・復帰（純粋ロジック）
+// オフセットは UTF-16。周辺文字列 before/after の両一致を優先してスコアリング。
+
+const CONTEXT = 20;
+const WINDOW = 2000;
+
+/**
+ * 保存用レコードを作る。
+ * @param {string} text @param {number} offset
+ */
+function makeRecord(text, offset) {
+  const o = clamp(offset, 0, text.length);
+  return {
+    offset: o,
+    previousLength: text.length,
+    before: text.slice(Math.max(0, o - CONTEXT), o),
+    after: text.slice(o, Math.min(text.length, o + CONTEXT)),
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * 保存レコードから現在テキスト上の復帰オフセットを求める。
+ * @param {string} text @param {{offset,before,after}} rec
+ * @returns {number}
+ */
+function restoreOffset(text, rec) {
+  if (!rec) return 0;
+  const anchor = clamp(rec.offset, 0, text.length);
+  const lo = Math.max(0, anchor - WINDOW);
+  const hi = Math.min(text.length, anchor + WINDOW);
+  const region = text.slice(lo, hi);
+
+  const candidates = [];
+  // before+after 両一致（before の直後に after が続く位置）
+  if (rec.before || rec.after) {
+    const combo = rec.before + rec.after;
+    if (combo) {
+      pushAll(region, combo, lo + rec.before.length, candidates, 3);
+    }
+  }
+  if (rec.after) pushAll(region, rec.after, lo, candidates, 2);
+  if (rec.before) {
+    // before 一致は before の直後を復帰点とする
+    let idx = -1;
+    while ((idx = region.indexOf(rec.before, idx + 1)) !== -1) {
+      candidates.push({ pos: lo + idx + rec.before.length, score: 1 });
+    }
+  }
+
+  if (candidates.length === 0) return anchor;
+  candidates.sort((a, b) => b.score - a.score || Math.abs(a.pos - anchor) - Math.abs(b.pos - anchor));
+  return candidates[0].pos;
+}
+
+function pushAll(region, needle, offsetIntoMatch, out, score) {
+  let idx = -1;
+  while ((idx = region.indexOf(needle, idx + 1)) !== -1) {
+    out.push({ pos: idx + offsetIntoMatch, score });
+  }
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+return { makeRecord, restoreOffset };
+})();
+
+__mods['renderer'] = (function(){ 'use strict';
+// renderer.js — 縦書きDOM生成（表示ページのみ）
+const {tokenize} = __mods['tokenizer'];
+const FULL_SPACE = '\u3000';
+
+/** 半角空白扱い（半角スペース・TAB） */
+function isHalfWs(ch) {
+  return ch === ' ' || ch === '\t';
+}
+function hasHalfWs(text) {
+  return text.includes(' ') || text.includes('\t');
+}
+
+/**
+ * ページを描画する。
+ * @param {HTMLElement} pageEl
+ * @param {string} text
+ * @param {{columns:{start,end}[]}} page
+ * @param {{ showRuby:boolean, halfColor:boolean, spaceColor?:boolean,
+ *           highlights?:{start,end,kind?:string}[],
+ *           grid?:boolean, cell?:number, chars?:number }} opt
+ */
+function renderPage(pageEl, text, page, opt) {
+  pageEl.textContent = '';
+  const highlights = opt.highlights || [];
+  for (const col of page.columns) {
+    const colEl = document.createElement('div');
+    colEl.className = 'col';
+    const slice = text.slice(col.start, col.end);
+    for (const t of tokenize(slice)) {
+      const absStart = col.start + t.sourceStart;
+      const absEnd = col.start + t.sourceEnd;
+      const hit = highlightHit(highlights, absStart, absEnd);
+      if (t.type === 'newline') continue;
+      let node;
+      if (t.type === 'ruby') {
+        if (opt.showRuby) {
+          node = document.createElement('ruby');
+          node.appendChild(document.createTextNode(t.baseText));
+          const rt = document.createElement('rt');
+          rt.textContent = t.rubyText;
+          node.appendChild(rt);
+        } else {
+          // ルビOFF: ルビ記号（｜《》）も含め元テキストをそのまま表示
+          node = document.createElement('span');
+          if (opt.spaceColor) appendSpaceColored(node, slice.slice(t.sourceStart, t.sourceEnd), opt);
+          else node.textContent = slice.slice(t.sourceStart, t.sourceEnd);
+        }
+      } else if (t.type === 'half') {
+        node = buildHalfNode(t.text, opt);
+      } else {
+        node = buildFullNode(t.text, opt);
+      }
+      if (hit) {
+        const mark = document.createElement('mark');
+        if (hit.kind === 'warn') mark.className = 'hl-warn';
+        else if (hit.kind === 'search') mark.className = 'hl-search';
+        mark.appendChild(node);
+        node = mark;
+      }
+      colEl.appendChild(node);
+    }
+    pageEl.appendChild(colEl);
+  }
+}
+
+/**
+ * 半角トークン。空白着色ON時は半角スペース/TAB区間を分離して緑系に。
+ * @param {string} text
+ * @param {{ halfColor:boolean, spaceColor?:boolean }} opt
+ * @returns {HTMLElement}
+ */
+function buildHalfNode(text, opt) {
+  const wrap = document.createElement('span');
+  wrap.className = 'half';
+  if (!opt.spaceColor || !hasHalfWs(text)) {
+    if (opt.halfColor) wrap.classList.add('half-color');
+    wrap.textContent = text;
+    return wrap;
+  }
+  // 半角空白（SP/TAB）とその他をラン分割
+  let i = 0;
+  while (i < text.length) {
+    const sp = isHalfWs(text[i]);
+    let j = i + 1;
+    while (j < text.length && isHalfWs(text[j]) === sp) j++;
+    const seg = document.createElement('span');
+    seg.className = 'half';
+    if (sp) seg.classList.add('space-half');
+    else if (opt.halfColor) seg.classList.add('half-color');
+    seg.textContent = text.slice(i, j);
+    wrap.appendChild(seg);
+    i = j;
+  }
+  return wrap;
+}
+
+/**
+ * 全角1トークン（結合文字付きの場合あり）。
+ * 全角スペースは青系。TABは半角空白と同様に緑系。
+ * @param {string} text
+ * @param {{ spaceColor?:boolean }} opt
+ * @returns {HTMLElement}
+ */
+function buildFullNode(text, opt) {
+  const node = document.createElement('span');
+  if (opt.spaceColor) {
+    if (text[0] === FULL_SPACE) node.className = 'space-full';
+    else if (text[0] === '\t') {
+      // TAB は tokenizer 上 full だが、空白表示では半角スペースと同じ緑系
+      node.className = 'half space-half';
+    }
+  }
+  node.textContent = text;
+  return node;
+}
+
+/**
+ * プレーン文字列中の全角/半角スペース/TABを着色（ルビOFF時の記法表示用）。
+ * @param {HTMLElement} parent
+ * @param {string} text
+ * @param {{ halfColor:boolean, spaceColor?:boolean }} opt
+ */
+function appendSpaceColored(parent, text, opt) {
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    // サロゲートはまとめて1単位
+    const cpLen = ch >= '\uD800' && ch <= '\uDBFF' && i + 1 < text.length ? 2 : 1;
+    const unit = text.slice(i, i + cpLen);
+    if (unit === FULL_SPACE) {
+      const s = document.createElement('span');
+      s.className = 'space-full';
+      s.textContent = unit;
+      parent.appendChild(s);
+      i += cpLen;
+      continue;
+    }
+    if (isHalfWs(unit)) {
+      let j = i + 1;
+      while (j < text.length && isHalfWs(text[j])) j++;
+      const s = document.createElement('span');
+      s.className = 'half space-half';
+      s.textContent = text.slice(i, j);
+      parent.appendChild(s);
+      i = j;
+      continue;
+    }
+    // 非空白ラン
+    let j = i + cpLen;
+    while (j < text.length) {
+      const c = text[j];
+      if (c === FULL_SPACE || isHalfWs(c)) break;
+      j += c >= '\uD800' && c <= '\uDBFF' && j + 1 < text.length ? 2 : 1;
+    }
+    parent.appendChild(document.createTextNode(text.slice(i, j)));
+    i = j;
+  }
+}
+
+/** 見出し行の着色は本文と組版を変えないため、行頭が #/## のトークン列にクラスを付ける処理は
+ *  main 側で行頭検出して colEl にマーカーを足す簡易実装とする（ここでは範囲ハイライトのみ）。 */
+
+function highlightHit(ranges, s, e) {
+  // 後勝ち（warn を search より後に push すれば warn 優先）
+  let hit = null;
+  for (const r of ranges) {
+    if (s < r.end && e > r.start) hit = r;
+  }
+  return hit;
+}
+
+return { renderPage };
+})();
+
+__mods['settings'] = (function(){ 'use strict';
+// settings.js — 設定と現在位置の LocalStorage 保存/復元
+const {makeRecord, restoreOffset} = __mods['position'];
+const SETTINGS_KEY = 'tategaki-settings';
+const POS_PREFIX = 'tategaki-position:';
+
+const PRESETS = [
+  { name: '20字 × 20行（400字）', charsPerColumn: 20, columnsPerPage: 20 },
+  { name: '40字 × 18行（720字）', charsPerColumn: 40, columnsPerPage: 18 },
+  { name: '42字 × 18行（756字）', charsPerColumn: 42, columnsPerPage: 18 },
+  { name: '40字 × 20行（800字）', charsPerColumn: 40, columnsPerPage: 20 },
+  { name: '42字 × 20行（840字）', charsPerColumn: 42, columnsPerPage: 20 },
+];
+
+const DEFAULT_SETTINGS = {
+  presetIndex: 1,
+  charsPerColumn: 40,
+  columnsPerPage: 18,
+  theme: 'light',
+  fontFamily: 'mincho',
+  fontSize: 20,
+  kinsoku: true,
+  burasage: true,
+  showRuby: true,
+  halfColor: true,
+  spaceColor: false,
+  gridLines: false,
+};
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+function saveSettings(s) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
+}
+
+function savePosition(fileName, text, offset) {
+  try {
+    localStorage.setItem(POS_PREFIX + fileName, JSON.stringify(makeRecord(text, offset)));
+  } catch {
+    /* ignore */
+  }
+}
+function loadPosition(fileName, text) {
+  try {
+    const raw = localStorage.getItem(POS_PREFIX + fileName);
+    if (!raw) return 0;
+    return restoreOffset(text, JSON.parse(raw));
+  } catch {
+    return 0;
+  }
+}
+
+return { loadSettings, saveSettings, savePosition, loadPosition, PRESETS, DEFAULT_SETTINGS };
+})();
+
+(function(){ 'use strict';
+// main.js — メインスレッドの統括
+const {pageIndexOfOffset} = __mods['paginator'];
+const {renderPage} = __mods['renderer'];
+const {PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition,} = __mods['settings'];
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  settings: loadSettings(),
+  worker: null,
+  docId: 0,
+  latest: { paginate: 0, warnings: 0, search: 0 },
+  reqSeq: 0,
+  text: '',
+  pages: [],
+  pageIndex: 0,
+  pendingOffset: 0,
+  fileName: 'untitled.txt',
+  fileHandle: null,
+  fileLastModified: 0,
+  warnings: [],
+  warnTotal: 0,
+  warnIndex: -1,
+  matches: [],
+  matchIndex: -1,
+};
+
+function init() {
+  state.worker = window.__createWorker();
+  state.worker.onmessage = onWorkerMessage;
+  bindUI();
+  applyAppearance();
+  buildPresetOptions();
+  reflectSettingsToUI();
+  populateFontSizes();
+  installCopyHandler();
+  window.addEventListener('resize', () => { populateFontSizes(); renderCurrent(); });
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('mouseup', () => { scrubbing = false; });
+  const wrap = $('pageWrap');
+  wrap.addEventListener('wheel', onWheel, { passive: false });
+  installSwipe(wrap);
+  installDragAndDrop();
+  startFileWatch();
+}
+
+/* ---------------- Drag & Drop ---------------- */
+function installDragAndDrop() {
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  ['dragenter', 'dragover'].forEach((ev) =>
+    window.addEventListener(ev, (e) => { stop(e); document.body.classList.add('dragover'); }));
+  ['dragleave', 'drop'].forEach((ev) =>
+    window.addEventListener(ev, (e) => { stop(e); if (ev === 'drop' || e.target === document.documentElement) document.body.classList.remove('dragover'); }));
+  window.addEventListener('drop', async (e) => {
+    document.body.classList.remove('dragover');
+    const items = e.dataTransfer && e.dataTransfer.items;
+    // File System Access のハンドルが取れれば自動更新監視も効く
+    if (items && items.length && items[0].getAsFileSystemHandle) {
+      try {
+        const handle = await items[0].getAsFileSystemHandle();
+        if (handle && handle.kind === 'file') {
+          const file = await handle.getFile();
+          openFile(file, handle);
+          return;
+        }
+      } catch { /* フォールバック */ }
+    }
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) openFile(file, null);
+  });
+}
+
+/* ---------------- Toast ---------------- */
+let _toastTimer = null;
+function showToast(msg, ms = 1000) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+/* ---------------- Worker ---------------- */
+// リクエスト種別 -> チャンネル、レスポンス種別 -> チャンネル の対応。
+// 世代管理は「チャンネル単位の最新 requestId」で行う。
+const REQ_CHANNEL = { paginate: 'paginate', detectWarnings: 'warnings', search: 'search' };
+const RES_CHANNEL = { paginated: 'paginate', warnings: 'warnings', searchResult: 'search' };
+
+function send(type, payload) {
+  const requestId = ++state.reqSeq;
+  const ch = REQ_CHANNEL[type];
+  if (ch) state.latest[ch] = requestId;
+  state.worker.postMessage({ documentId: state.docId, requestId, type, payload });
+  return requestId;
+}
+function onWorkerMessage(e) {
+  const { documentId, requestId, type, payload } = e.data;
+  if (documentId !== state.docId) return; // 古い原稿の結果は破棄
+  const ch = RES_CHANNEL[type];
+  if (ch && requestId !== state.latest[ch]) return; // 古い結果は破棄
+
+  if (type === 'loaded') {
+    state.text = payload.text;
+    setProgress('');
+    const encLabel = { 'utf-8': 'UTF-8', 'shift_jis': 'Shift_JIS', unknown: '不明' }[payload.encoding] || payload.encoding;
+    $('fileMeta').textContent = `${state.fileName} ・ ${encLabel} ・ 改行 ${payload.newline} ・ ${state.text.length}字`;
+    state.pendingOffset = loadPosition(state.fileName, state.text);
+    requestPaginate();
+    requestWarnings();
+    updateSearchIndicator();
+  } else if (type === 'needEncoding') {
+    setProgress('文字コードを判定できませんでした');
+    $('fileMeta').textContent = `${state.fileName} ・ 文字コード判定不可`;
+  } else if (type === 'paginated') {
+    state.pages = payload.pages;
+    state.pageIndex = clampPage(pageIndexOfOffset(state.pages, state.pendingOffset));
+    buildThumbnails();
+    populateFontSizes();
+    renderCurrent();
+    // ページ境界が変わると警告のページ番号も変わる
+    if (state.warnings.length) renderWarnings(state.warnTotal);
+    setProgress('');
+  } else if (type === 'warnings') {
+    state.warnings = payload.items;
+    state.warnTotal = payload.total || payload.items.length;
+    renderWarnings(state.warnTotal);
+  } else if (type === 'searchResult') {
+    state.matches = payload.matches;
+    state.matchIndex = state.matches.length ? 0 : -1;
+    $('searchCount').textContent = payload.total ? `${payload.total}件` : '0件';
+    if (state.matchIndex >= 0) gotoOffset(state.matches[0].start);
+    else renderCurrent();
+  } else if (type === 'error') {
+    setProgress('エラー: ' + payload.message);
+  }
+}
+
+function currentConfig() {
+  const s = state.settings;
+  return { charsPerColumn: s.charsPerColumn, columnsPerPage: s.columnsPerPage, kinsoku: s.kinsoku, burasage: s.burasage };
+}
+function requestPaginate() {
+  setProgress('ページ分割中…');
+  send('paginate', { config: currentConfig() });
+}
+function requestWarnings() {
+  send('detectWarnings', { showRuby: state.settings.showRuby, enabled: null });
+}
+
+/* ---------------- File open ---------------- */
+async function openFile(file, handle) {
+  state.fileName = file.name || 'untitled.txt';
+  state.fileHandle = handle || null;
+  state.fileLastModified = file.lastModified || 0;
+  updateReloadLabel();
+  const buf = await file.arrayBuffer();
+  state.docId++;
+  setProgress('読み込み中…');
+  send('load', { bytes: buf });
+}
+
+/* ---------------- Rendering ---------------- */
+function renderCurrent() {
+  const pageEl = $('page');
+  if (!state.pages.length) {
+    pageEl.textContent = '';
+    updateStatus();
+    return;
+  }
+  const page = state.pages[state.pageIndex];
+  pageEl.classList.toggle('grid', !!state.settings.gridLines);
+  const highlights = [];
+  if (state.matchIndex >= 0 && state.matches[state.matchIndex]) {
+    highlights.push({ ...state.matches[state.matchIndex], kind: 'search' });
+  }
+  if (state._warnHighlight) {
+    highlights.push({ ...state._warnHighlight, kind: 'warn' });
+  }
+
+  const fs = Math.min(state.settings.fontSize, maxFitFontSize());
+  pageEl.style.transform = 'none';
+  applyFs(fs);
+  renderPage(pageEl, state.text, page, {
+    showRuby: state.settings.showRuby,
+    halfColor: state.settings.halfColor,
+    spaceColor: state.settings.spaceColor,
+    highlights,
+  });
+  markHeadings(pageEl, page);
+  buildRulers(pageEl, fs * 1.05);
+
+  // 指定した行数・字数が必ず収まるよう、はみ出す分だけページ全体を等倍縮小する。
+  // フォント計算の誤差に依存せず、全列が確実に表示される。
+  const wrap = $('pageWrap');
+  const availW = wrap.clientWidth - 44;
+  const availH = wrap.clientHeight - 44;
+  const ext = measureExtent(pageEl);
+  let scale = 1;
+  if (ext && ext.w > 0 && ext.h > 0) {
+    scale = Math.min(1, availW / ext.w, availH / ext.h);
+  }
+  pageEl.style.transformOrigin = 'center center';
+  pageEl.style.transform = scale < 0.999 ? `scale(${scale})` : 'none';
+
+  updateStatus();
+  persistPosition();
+}
+
+// 全列の実描画範囲（幅・高さ）を測る。overflow で見切れても正しい寸法が取れる。
+function measureExtent(pageEl) {
+  const cols = pageEl.querySelectorAll('.col');
+  if (!cols.length) return null;
+  let l = Infinity, r = -Infinity, t = Infinity, b = -Infinity;
+  cols.forEach((c) => {
+    const q = c.getBoundingClientRect();
+    l = Math.min(l, q.left); r = Math.max(r, q.right);
+    t = Math.min(t, q.top); b = Math.max(b, q.bottom);
+  });
+  return { w: r - l, h: b - t };
+}
+
+// 字級と升目用CSS変数をまとめて適用
+function applyFs(fs) {
+  const root = document.documentElement.style;
+  root.setProperty('--fs', fs + 'px');
+  const cell = fs * 1.05;
+  root.setProperty('--cell', cell.toFixed(2) + 'px');
+  root.setProperty('--col-h', (cell * state.settings.charsPerColumn).toFixed(2) + 'px');
+}
+
+// 升目の目盛り: ページ外周に一列だけ（右=文字位置, 上=列位置）
+function buildRulers(pageEl, cell) {
+  pageEl.querySelectorAll('.ruler').forEach((n) => n.remove());
+  if (!state.settings.gridLines) return;
+  const cols = pageEl.querySelectorAll('.col');
+  if (!cols.length) return;
+  const colW = cols[0].getBoundingClientRect().width;
+  const chars = state.settings.charsPerColumn;
+  const ncols = state.settings.columnsPerPage;
+
+  const right = document.createElement('div');
+  right.className = 'ruler ruler-right';
+  for (let k = 5; k <= chars; k += 5) {
+    const s = document.createElement('span');
+    s.textContent = String(k);
+    s.style.top = (k * cell - cell / 2) + 'px'; // 半文字上
+    right.appendChild(s);
+  }
+  pageEl.appendChild(right);
+
+  const top = document.createElement('div');
+  top.className = 'ruler ruler-top';
+  // 縦書きの「行」= 列。右端が1行目。数字は各行のセンターに置く
+  for (let k = 5; k <= ncols; k += 5) {
+    const s = document.createElement('span');
+    s.textContent = String(k);
+    s.style.right = ((k - 0.5) * colW) + 'px';
+    top.appendChild(s);
+  }
+  pageEl.appendChild(top);
+}
+
+function markHeadings(pageEl, page) {
+  // 見出し行（#/##）の列に色クラスを付与（組版は変えない）。#=章, ##=話 で色を分ける。
+  const cols = pageEl.querySelectorAll('.col');
+  page.columns.forEach((c, i) => {
+    if (!cols[i]) return;
+    const head = state.text.slice(c.start, c.start + 3);
+    if (/^##(?:\s|#|$)/.test(head)) cols[i].classList.add('heading-2');
+    else if (/^#(?:\s|$)/.test(head)) cols[i].classList.add('heading-1');
+  });
+}
+
+// 1文字ぶんの実寸をプローブ測定し、指定の字数×行数が収まる最大字級を理論計算する。
+// 推定係数に頼らないので、指定した行数が必ず表示される。
+function maxFitFontSize() {
+  const wrap = $('pageWrap');
+  const availH = Math.max(40, wrap.clientHeight - 44);
+  const availW = Math.max(40, wrap.clientWidth - 44);
+  const s = state.settings;
+  const PROBE_FS = 100;
+
+  const probe = document.createElement('div');
+  probe.className = 'col';
+  probe.style.cssText = 'font-size:100px;visibility:hidden;position:absolute;left:-99999px;top:0;';
+  probe.textContent = 'あ'.repeat(Math.max(1, s.charsPerColumn));
+  wrap.appendChild(probe);
+  const rect = probe.getBoundingClientRect();
+  wrap.removeChild(probe);
+
+  const colH100 = rect.height;   // charsPerColumn 文字ぶんの列の長さ（fs=100）
+  const colW100 = rect.width;    // 1列の幅（fs=100）
+  if (!colH100 || !colW100) return s.fontSize;
+
+  const gap = parseFloat(getComputedStyle($('page')).columnGap) || 0;
+  const fsByH = (availH * PROBE_FS) / colH100;
+  const fsByW = ((availW - (s.columnsPerPage - 1) * gap) * PROBE_FS) / (s.columnsPerPage * colW100);
+  return Math.max(8, Math.floor(Math.min(fsByH, fsByW)));
+}
+
+// 字級セレクトを「表示可能なサイズ」だけで再構築する。
+function populateFontSizes() {
+  const sel = $('fontSize');
+  const max = maxFitFontSize();
+  let cur = Math.min(state.settings.fontSize, max);
+  if (cur < 8) cur = 8;
+  state.settings.fontSize = cur;
+  const sizes = [];
+  for (let v = 8; v <= max; v += 2) sizes.push(v);
+  if (!sizes.includes(cur)) sizes.push(cur);
+  sizes.sort((a, b) => a - b);
+  sel.innerHTML = '';
+  for (const v of sizes) {
+    const o = document.createElement('option');
+    o.value = String(v);
+    o.textContent = v + 'px';
+    sel.appendChild(o);
+  }
+  sel.value = String(cur);
+}
+
+/* ---------------- Thumbnails ---------------- */
+let scrubbing = false;
+function buildThumbnails() {
+  const box = $('thumbs');
+  box.innerHTML = '';
+  state.pages.forEach((p, i) => {
+    const t = document.createElement('div');
+    t.className = 'thumb';
+    t.dataset.i = String(i);
+    const num = document.createElement('span');
+    num.className = 'tnum';
+    num.textContent = String(i + 1);
+    t.appendChild(num);
+    const hd = firstHeadingIn(p);
+    if (hd) {
+      const h = document.createElement('span');
+      h.className = hd.level === 2 ? 'thead h2' : 'thead';
+      h.textContent = hd.text;
+      t.appendChild(h);
+    }
+    t.addEventListener('mousedown', (e) => { e.preventDefault(); scrubbing = true; gotoPage(i); });
+    t.addEventListener('mouseenter', () => { if (scrubbing) gotoPage(i); });
+    box.appendChild(t);
+  });
+  updateThumbActive();
+}
+function firstHeadingIn(p) {
+  const seg = state.text.slice(p.range.start, p.range.end);
+  for (const line of seg.split('\n')) {
+    const m = /^(#{1,2})\s*(.+)$/.exec(line);
+    if (m) return { level: m[1].length, text: m[2].slice(0, 24) };
+  }
+  return null;
+}
+function updateThumbActive() {
+  const box = $('thumbs');
+  const cur = box.querySelector('.thumb.active');
+  if (cur) cur.classList.remove('active');
+  const el = box.children[state.pageIndex];
+  if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
+}
+
+function updateStatus() {
+  const total = state.pages.length;
+  const cur = total ? state.pageIndex + 1 : 0;
+  const page = state.pages[state.pageIndex];
+  const chars = page ? page.range.end - page.range.start : 0;
+  $('totalPages').textContent = String(total);
+  $('pageChars').textContent = String(chars);
+  $('totalChars').textContent = String(state.text.length);
+  const jump = $('jumpInput');
+  jump.max = String(total);
+  if (document.activeElement !== jump) jump.value = String(cur);
+  updateThumbActive();
+}
+
+function setProgress(msg) {
+  $('progress').textContent = msg;
+}
+
+// File System Access のハンドルがあれば自動更新監視が有効 →「自動更新」表示のみ。
+// 不可なら「更新」ボタン（クリックで再読込）を表示。
+function updateReloadLabel() {
+  const btn = $('reloadBtn');
+  const badge = $('autoLabel');
+  if (state.fileHandle) {
+    btn.hidden = true;
+    badge.hidden = false;
+  } else {
+    btn.hidden = false;
+    badge.hidden = true;
+  }
+}
+
+/* ---------------- Navigation ---------------- */
+function clampPage(i) {
+  return Math.max(0, Math.min(state.pages.length - 1, i));
+}
+/** 再ページ分割後も今見ている位置を維持するため pendingOffset を同期する */
+function syncPendingFromPage() {
+  const page = state.pages[state.pageIndex];
+  if (page) state.pendingOffset = page.range.start;
+}
+function go(delta) {
+  const ni = clampPage(state.pageIndex + delta);
+  if (ni !== state.pageIndex) {
+    state.pageIndex = ni;
+    syncPendingFromPage();
+    renderCurrent();
+  }
+}
+function gotoPage(i) {
+  state.pageIndex = clampPage(i);
+  syncPendingFromPage();
+  renderCurrent();
+}
+function gotoOffset(offset) {
+  if (!state.pages.length) return;
+  state.pendingOffset = Math.max(0, Math.min(offset, state.text.length));
+  state.pageIndex = clampPage(pageIndexOfOffset(state.pages, state.pendingOffset));
+  renderCurrent();
+}
+function onKey(e) {
+  // 文字入力中はページ送りしない（checkbox/button 上の Space はページ送りにする）
+  const el = e.target;
+  const tag = el && el.tagName;
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (tag === 'INPUT') {
+    const ty = (el.type || 'text').toLowerCase();
+    if (ty === 'text' || ty === 'search' || ty === 'number' || ty === 'password' || ty === '') return;
+  }
+
+  // 縦書きは右→左。ArrowLeft で次ページ、ArrowRight で前ページが自然。
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { go(1); e.preventDefault(); }
+  else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { go(-1); e.preventDefault(); }
+  else if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
+    // Space=次、Shift+Space=前
+    go(e.shiftKey ? -1 : 1);
+    e.preventDefault();
+  }
+}
+let wheelAccum = 0;
+function onWheel(e) {
+  e.preventDefault();
+  wheelAccum += e.deltaY;
+  if (Math.abs(wheelAccum) > 60) {
+    go(wheelAccum > 0 ? 1 : -1);
+    wheelAccum = 0;
+  }
+}
+function installSwipe(el) {
+  let x0 = null;
+  el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1); // 左スワイプ=次
+    x0 = null;
+  });
+}
+
+/* ---------------- Warnings panel ---------------- */
+function renderWarnings(total) {
+  const list = $('warnList');
+  list.textContent = '';
+  const shown = total != null ? total : state.warnTotal;
+  $('warnTotal').textContent = shown ? `${shown}件` : '0件';
+  state.warnings.forEach((w, idx) => {
+    const li = document.createElement('li');
+    li.className = 'warn-item sev-' + w.severity;
+    li.dataset.idx = String(idx);
+    li.textContent = formatWarningLabel(w);
+    li.title = w.severity + ' / ' + (w.label || w.code);
+    if (idx === state.warnIndex) li.classList.add('active');
+    li.addEventListener('click', () => jumpWarning(idx));
+    list.appendChild(li);
+  });
+  syncWarnListActive();
+}
+/** 一覧先頭に「p・行」を付ける（ページ内の原稿用紙行＝列番号） */
+function formatWarningLabel(w) {
+  const off = w.range && typeof w.range.start === 'number' ? w.range.start : 0;
+  const loc = locateOnPages(off);
+  const base = w.label || w.code || '';
+  if (!loc) return `p– –行　${base}`;
+  return `p${loc.page} ${loc.line}行　${base}`;
+}
+/**
+ * オフセットが属する表示ページ番号（1始まり）と、
+ * そのページ内の原稿用紙の行番号（1始まり＝縦書きの列番号）。
+ * @param {number} offset
+ * @returns {{page:number, line:number}|null}
+ */
+function locateOnPages(offset) {
+  if (!state.pages || !state.pages.length) return null;
+  const pi = pageIndexOfOffset(state.pages, offset);
+  const page = state.pages[pi];
+  if (!page) return null;
+  const cols = page.columns || [];
+  let line = 1;
+  if (cols.length) {
+    // 半開区間 [start,end)。end ちょうどは次列だが、最終列 end は最終行に含める
+    let found = -1;
+    for (let i = 0; i < cols.length; i++) {
+      const c = cols[i];
+      const last = i === cols.length - 1;
+      if (offset >= c.start && (offset < c.end || (last && offset <= c.end))) {
+        found = i;
+        break;
+      }
+    }
+    // 列の隙間や境界ずれのときは最も近い列
+    if (found < 0) {
+      found = 0;
+      for (let i = 0; i < cols.length; i++) {
+        if (offset >= cols[i].start) found = i;
+      }
+    }
+    line = found + 1;
+  }
+  return { page: pi + 1, line };
+}
+function jumpWarning(idx) {
+  const w = state.warnings[idx];
+  if (!w) return;
+  state.warnIndex = idx;
+  state._warnHighlight = w.range;
+  syncWarnListActive();
+  gotoOffset(w.range.start);
+}
+/** 校正の前/次。端では止まってループしない。先頭で「前」ならハイライト解除して1ページ目。 */
+function stepWarning(delta) {
+  if (!state.warnings.length) return;
+  if (state.warnIndex < 0) {
+    // 未選択: 「次」だけ先頭へ。「前」はループせず何もしない（または1ページ目）
+    if (delta < 0) {
+      clearWarningJump();
+      gotoPage(0);
+      return;
+    }
+    jumpWarning(0);
+    return;
+  }
+  const ni = state.warnIndex + delta;
+  if (ni < 0) {
+    clearWarningJump();
+    gotoPage(0);
+    return;
+  }
+  if (ni >= state.warnings.length) return; // 末尾で次 → 止まってループしない
+  jumpWarning(ni);
+}
+function clearWarningJump() {
+  state.warnIndex = -1;
+  state._warnHighlight = null;
+  syncWarnListActive();
+}
+/** 一覧の選択行に本文と同じ黄＋枠を付け、見える位置へスクロール */
+function syncWarnListActive() {
+  const list = $('warnList');
+  if (!list) return;
+  let activeEl = null;
+  list.querySelectorAll('.warn-item').forEach((li) => {
+    const on = Number(li.dataset.idx) === state.warnIndex;
+    li.classList.toggle('active', on);
+    if (on) activeEl = li;
+  });
+  if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+    activeEl.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+/* ---------------- Search ---------------- */
+function doSearch() {
+  const q = $('searchInput').value;
+  if (!q) { state.matches = []; state.matchIndex = -1; $('searchCount').textContent = ''; renderCurrent(); return; }
+  send('search', { query: q, headingOnly: false });
+}
+function stepMatch(delta) {
+  if (!state.matches.length) return;
+  state.matchIndex = (state.matchIndex + delta + state.matches.length) % state.matches.length;
+  gotoOffset(state.matches[state.matchIndex].start);
+}
+function updateSearchIndicator() {
+  $('searchCount').textContent = '';
+}
+
+/* ---------------- Copy normalization（親文字のみ） ---------------- */
+function installCopyHandler() {
+  document.addEventListener('copy', (e) => {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+    const frag = sel.getRangeAt(0).cloneContents();
+    frag.querySelectorAll('rt, rp').forEach((n) => n.remove());
+    if (e.clipboardData) {
+      e.clipboardData.setData('text/plain', frag.textContent);
+      e.preventDefault();
+    }
+  });
+}
+
+/* ---------------- Position persist ---------------- */
+function persistPosition() {
+  const page = state.pages[state.pageIndex];
+  if (page) savePosition(state.fileName, state.text, page.range.start);
+}
+
+/* ---------------- File watch (File System Access API) ---------------- */
+function startFileWatch() {
+  const check = async () => {
+    if (!state.fileHandle) return;
+    try {
+      const file = await state.fileHandle.getFile();
+      if (file.lastModified !== state.fileLastModified) {
+        const keepOffset = state.pages[state.pageIndex] ? state.pages[state.pageIndex].range.start : 0;
+        state.fileLastModified = file.lastModified;
+        const buf = await file.arrayBuffer();
+        state.docId++;
+        state.pendingOffset = keepOffset;
+        send('load', { bytes: buf });
+        showToast('更新された');
+      }
+    } catch { /* 権限切れ等は無視 */ }
+  };
+  setInterval(check, 3000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+}
+
+/* ---------------- UI wiring ---------------- */
+function buildPresetOptions() {
+  const sel = $('presetSelect');
+  PRESETS.forEach((p, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = p.name;
+    sel.appendChild(o);
+  });
+  const custom = document.createElement('option');
+  custom.value = 'custom';
+  custom.textContent = 'カスタム';
+  sel.appendChild(custom);
+}
+function reflectSettingsToUI() {
+  const s = state.settings;
+  $('presetSelect').value = s.presetIndex >= 0 ? String(s.presetIndex) : 'custom';
+  $('cpc').value = s.charsPerColumn;
+  $('cpp').value = s.columnsPerPage;
+  $('kinsoku').checked = s.kinsoku;
+  $('burasage').checked = s.burasage;
+  $('showRuby').checked = s.showRuby;
+  $('halfColor').checked = s.halfColor;
+  $('spaceColor').checked = s.spaceColor;
+  $('gridLines').checked = s.gridLines;
+  $('themeSelect').value = s.theme;
+  $('fontSelect').value = s.fontFamily;
+  $('fontSize').value = s.fontSize;
+  $('burasage').disabled = !s.kinsoku;
+}
+function applyAppearance() {
+  const s = state.settings;
+  document.documentElement.dataset.theme = s.theme;
+  document.documentElement.dataset.font = s.fontFamily;
+}
+function persist() { saveSettings(state.settings); }
+
+function bindUI() {
+  $('fileInput').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) openFile(f, null);
+  });
+  $('openFsBtn').addEventListener('click', async () => {
+    if (!window.showOpenFilePicker) { $('fileInput').click(); return; }
+    try {
+      const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }] });
+      const file = await handle.getFile();
+      openFile(file, handle);
+    } catch { /* キャンセル */ }
+  });
+  $('reloadBtn').addEventListener('click', () => $('fileInput').click());
+
+  $('presetSelect').addEventListener('change', (e) => {
+    const v = e.target.value;
+    if (v === 'custom') { state.settings.presetIndex = -1; }
+    else {
+      const p = PRESETS[+v];
+      state.settings.presetIndex = +v;
+      state.settings.charsPerColumn = p.charsPerColumn;
+      state.settings.columnsPerPage = p.columnsPerPage;
+    }
+    reflectSettingsToUI(); persist(); if (state.text) requestPaginate();
+  });
+  const onCustom = () => {
+    state.settings.presetIndex = -1;
+    state.settings.charsPerColumn = clampInt($('cpc').value, 1, 60, 40);
+    state.settings.columnsPerPage = clampInt($('cpp').value, 1, 60, 18);
+    $('presetSelect').value = 'custom';
+    persist(); if (state.text) requestPaginate();
+  };
+  $('cpc').addEventListener('change', onCustom);
+  $('cpp').addEventListener('change', onCustom);
+
+  $('kinsoku').addEventListener('change', (e) => {
+    state.settings.kinsoku = e.target.checked;
+    $('burasage').disabled = !e.target.checked;
+    persist(); if (state.text) requestPaginate();
+  });
+  $('burasage').addEventListener('change', (e) => {
+    state.settings.burasage = e.target.checked; persist(); if (state.text) requestPaginate();
+  });
+  // ルビ表示: 再ページ分割しない。再描画＋ワーニング再検出のみ。
+  $('showRuby').addEventListener('change', (e) => {
+    state.settings.showRuby = e.target.checked; persist(); renderCurrent(); if (state.text) requestWarnings();
+  });
+  $('halfColor').addEventListener('change', (e) => {
+    state.settings.halfColor = e.target.checked; persist(); renderCurrent();
+  });
+  $('spaceColor').addEventListener('change', (e) => {
+    state.settings.spaceColor = e.target.checked; persist(); renderCurrent();
+  });
+  $('gridLines').addEventListener('change', (e) => {
+    state.settings.gridLines = e.target.checked; persist(); renderCurrent();
+  });
+  $('themeSelect').addEventListener('change', (e) => {
+    state.settings.theme = e.target.value; applyAppearance(); persist();
+  });
+  $('fontSelect').addEventListener('change', (e) => {
+    state.settings.fontFamily = e.target.value; applyAppearance(); persist(); renderCurrent();
+  });
+  $('fontSize').addEventListener('change', (e) => {
+    state.settings.fontSize = clampInt(e.target.value, 8, 60, 20); persist(); renderCurrent();
+  });
+
+  $('prevBtn').addEventListener('click', () => go(-1));
+  $('nextBtn').addEventListener('click', () => go(1));
+  $('jumpInput').addEventListener('change', (e) => gotoPage((+e.target.value || 1) - 1));
+
+  $('searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+  $('searchBtn').addEventListener('click', doSearch);
+  $('searchPrev').addEventListener('click', () => stepMatch(-1));
+  $('searchNext').addEventListener('click', () => stepMatch(1));
+
+  $('warnPrev').addEventListener('click', () => stepWarning(-1));
+  $('warnNext').addEventListener('click', () => stepWarning(1));
+
+  $('togglePanel').addEventListener('click', () => document.body.classList.toggle('panel-open'));
+}
+
+function clampInt(v, lo, hi, def) {
+  const n = parseInt(v, 10);
+  if (Number.isNaN(n)) return def;
+  return Math.max(lo, Math.min(hi, n));
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+})();
+
+</script>
+</body>
+</html>

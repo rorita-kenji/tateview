@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>縦View</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <!-- Google tag (gtag.js) — https のみ（file://・http ローカルでは読み込まない） -->
+  <script>
+    if (location.protocol === 'https:') {
+      var script = document.createElement('script');
+      script.async = true;
+      script.src = 'https://www.googletagmanager.com/gtag/js?id=G-FEWVNH23P4';
+      document.head.appendChild(script);
+
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-FEWVNH23P4');
+    }
+  </script>
+</head>
+<body>
+  <!-- 上部メニュー(1段): ロゴ / 開く / ファイル名 / 検索 / 校正 / 更新 / 体裁 / 字・行 -->
+  <div id="topbar">
+    <span class="brand">縦View</span>
+    <button id="openFsBtn">開く</button>
+    <input id="fileInput" type="file" accept=".txt,text/plain" hidden />
+    <span id="fileMeta" class="hint">ファイル未読み込み</span>
+
+    <span class="sep"></span>
+    <input id="searchInput" type="text" placeholder="検索" />
+    <button id="searchBtn" title="検索">🔍</button>
+    <button id="searchPrev" title="前の一致">前</button>
+    <button id="searchNext" title="次の一致">次</button>
+    <span id="searchCount" class="hint"></span>
+
+    <span class="sep"></span>
+    <button id="reloadBtn" title="手動で再読込">更新</button>
+    <span id="autoLabel" class="badge" hidden>自動更新</span>
+    <select id="presetSelect" title="体裁"></select>
+    <label>字<input id="cpc" type="number" min="1" max="60" /></label>
+    <label>行<input id="cpp" type="number" min="1" max="60" /></label>
+    <button id="togglePanel" class="primary" title="校正パネル">校正</button>
+  </div>
+
+  <div id="toast"></div>
+  <div id="dropHint">ここにテキストファイルをドロップ</div>
+
+  <main>
+    <div id="sidebar">
+      <div id="thumbs" title="ドラッグでページ移動"></div>
+      <!-- 左メニュー: ページ移動 + 表示設定 -->
+      <div id="controls">
+        <div class="ctrl-row nav">
+          <button id="nextBtn">◀ 次</button>
+          <button id="prevBtn">前 ▶</button>
+        </div>
+        <div class="ctrl-row status">
+          <label>ページ<input id="jumpInput" type="number" min="1" /></label>
+          <span>/ <span id="totalPages">0</span></span>
+        </div>
+        <div class="ctrl-row status">
+          <span><span id="pageChars">0</span>文字 / 総文字<span id="totalChars">0</span></span>
+          <span id="progress"></span>
+        </div>
+        <hr />
+        <div class="ctrl-row">
+          <label><input id="kinsoku" type="checkbox" />禁則</label>
+          <label><input id="burasage" type="checkbox" />ぶら下げ</label>
+        </div>
+        <div class="ctrl-row">
+          <label><input id="showRuby" type="checkbox" />ルビ</label>
+          <label><input id="halfColor" type="checkbox" />半角色</label>
+          <label><input id="spaceColor" type="checkbox" />空白</label>
+          <label><input id="gridLines" type="checkbox" />升目</label>
+        </div>
+        <div class="ctrl-row">
+          <label>テーマ<select id="themeSelect"><option value="light">ライト</option><option value="dark">ダーク</option></select></label>
+        </div>
+        <div class="ctrl-row">
+          <label>書体<select id="fontSelect"><option value="mincho">明朝</option><option value="gothic">ゴシック</option></select></label>
+          <select id="fontSize" title="字級"></select>
+        </div>
+        <div id="appCredit" class="app-credit">
+          <span>v0.9</span>
+          <span>by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="pageWrap"><div id="page"></div></div>
+
+    <aside>
+      <div class="section">
+        <h2>校正ワーニング <span id="warnTotal" class="hint"></span></h2>
+        <div><button id="warnPrev">前</button> <button id="warnNext">次</button></div>
+      </div>
+      <ul id="warnList"></ul>
+    </aside>
+  </main>
+
+  <!-- DEV: モジュール直読み。ビルド後は単一HTMLに結合される。 -->
+  <script>window.__createWorker = () => new Worker('./worker.js', { type: 'module' });</script>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

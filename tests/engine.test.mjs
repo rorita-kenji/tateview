@@ -1,0 +1,322 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { normalizeNewlines } from '../src/modules/normalize.js';
+import { detectAndDecode } from '../src/modules/encoding.js';
+import { tokenize, tokenizeToArray } from '../src/modules/tokenizer.js';
+import { paginate, pageIndexOfOffset } from '../src/modules/paginator.js';
+import { detectWarnings } from '../src/modules/warnings.js';
+import { searchAll } from '../src/modules/search.js';
+import { makeRecord, restoreOffset } from '../src/modules/position.js';
+
+const enc = (s) => new TextEncoder().encode(s);
+
+/* ---------------- normalize ---------------- */
+test('normalize: CRLF/CR/LF 混在 -> LF', () => {
+  assert.equal(normalizeNewlines('a\r\nb\rc\nd'), 'a\nb\nc\nd');
+});
+
+/* ---------------- encoding ---------------- */
+test('encoding: UTF-8 (BOMなし)', () => {
+  const r = detectAndDecode(enc('こんにちは'));
+  assert.equal(r.encoding, 'utf-8');
+  assert.equal(r.text, 'こんにちは');
+});
+test('encoding: UTF-8 (BOMあり)', () => {
+  const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...enc('あ')]);
+  const r = detectAndDecode(bytes);
+  assert.equal(r.encoding, 'utf-8');
+  assert.equal(r.text, 'あ');
+});
+test('encoding: Shift_JIS', () => {
+  // 「あいう」の Shift_JIS バイト列
+  const sjis = new Uint8Array([0x82, 0xa0, 0x82, 0xa2, 0x82, 0xa4]);
+  const r = detectAndDecode(sjis);
+  assert.equal(r.encoding, 'shift_jis');
+  assert.equal(r.text, 'あいう');
+});
+
+/* ---------------- tokenizer ---------------- */
+test('tokenizer: 半角ランは ceil(n*0.5) マス', () => {
+  const toks = tokenizeToArray('abc'); // 3 half
+  assert.equal(toks.length, 1);
+  assert.equal(toks[0].type, 'half');
+  assert.equal(toks[0].mass, 2); // ceil(1.5)
+});
+test('tokenizer: 明示ルビ ｜親《ルビ》', () => {
+  const toks = tokenizeToArray('｜漢字《かんじ》');
+  assert.equal(toks.length, 1);
+  assert.equal(toks[0].type, 'ruby');
+  assert.equal(toks[0].baseText, '漢字');
+  assert.equal(toks[0].rubyText, 'かんじ');
+  assert.equal(toks[0].mass, 2);
+});
+test('tokenizer: 自動ルビ 漢字《ルビ》', () => {
+  const toks = tokenizeToArray('東京《とうきょう》');
+  assert.equal(toks[0].type, 'ruby');
+  assert.equal(toks[0].baseText, '東京');
+  assert.equal(toks[0].mass, 2);
+});
+test('tokenizer: サロゲートペア A😀B の sourceStart/End は UTF-16、slice で復元', () => {
+  const text = 'A😀B';
+  for (const t of tokenize(text)) {
+    assert.equal(text.slice(t.sourceStart, t.sourceEnd), t.text === '' ? '\n' : text.slice(t.sourceStart, t.sourceEnd));
+  }
+  // 😀 は UTF-16 で2、range が正しいこと
+  const toks = tokenizeToArray(text);
+  const rejoined = toks.map((t) => text.slice(t.sourceStart, t.sourceEnd)).join('');
+  assert.equal(rejoined, text);
+});
+test('tokenizer: 全トークンが隙間なく全文を被覆する', () => {
+  const text = 'あA1｜漢《か》。\nEnd😀';
+  const toks = tokenizeToArray(text);
+  let pos = 0;
+  for (const t of toks) {
+    assert.equal(t.sourceStart, pos, 'contiguous start');
+    pos = t.sourceEnd;
+  }
+  assert.equal(pos, text.length);
+});
+
+/* ---------------- paginator ---------------- */
+function checkInvariants(pages, textLen) {
+  let prevEnd = 0;
+  for (const p of pages) {
+    assert.equal(p.range.start, prevEnd, 'page contiguous');
+    let colPrev = p.range.start;
+    for (const c of p.columns) {
+      assert.equal(c.start, colPrev, 'col contiguous');
+      assert.ok(c.end >= c.start);
+      colPrev = c.end;
+    }
+    if (p.columns.length) assert.equal(colPrev, p.range.end, 'page end == last col end');
+    prevEnd = p.range.end;
+  }
+  assert.equal(prevEnd, textLen, 'last end == text length');
+}
+
+test('paginator: 禁則OFF 固定期待値（4字×2行）', () => {
+  const text = 'あいうえおかきくけこ'; // 10 full
+  const cfg = { charsPerColumn: 4, columnsPerPage: 2, kinsoku: false, burasage: false };
+  const pages = paginate(tokenize(text), cfg);
+  assert.equal(pages.length, 2);
+  assert.deepEqual(pages[0].columns, [{ start: 0, end: 4 }, { start: 4, end: 8 }]);
+  assert.deepEqual(pages[1].columns, [{ start: 8, end: 10 }]);
+  checkInvariants(pages, text.length);
+});
+
+test('paginator: 決定性（2回同一）', () => {
+  const text = 'あ'.repeat(97) + 'ABCDE。」\n次の行';
+  const cfg = { charsPerColumn: 20, columnsPerPage: 10, kinsoku: true, burasage: true };
+  const a = paginate(tokenize(text), cfg);
+  const b = paginate(tokenize(text), cfg);
+  assert.deepEqual(a, b);
+  checkInvariants(a, text.length);
+});
+
+test('paginator: 改行は直前列に含まれ穴を作らない', () => {
+  const text = 'あい\nうえ';
+  const cfg = { charsPerColumn: 10, columnsPerPage: 10, kinsoku: false, burasage: false };
+  const pages = paginate(tokenize(text), cfg);
+  checkInvariants(pages, text.length);
+  assert.deepEqual(pages[0].columns[0], { start: 0, end: 3 }); // あい\n
+});
+
+test('paginator: 先頭改行・連続改行・末尾改行・空ファイル', () => {
+  const cfg = { charsPerColumn: 5, columnsPerPage: 5, kinsoku: false, burasage: false };
+  for (const text of ['\nあ', 'あ\n\n\nい', 'あ\n', '']) {
+    const pages = paginate(tokenize(text), cfg);
+    checkInvariants(pages, text.length);
+    assert.ok(pages.length >= 1);
+  }
+});
+
+test('paginator: 列幅より長い半角ランは単独列で空列を無限生成しない', () => {
+  const text = 'abcdefghijklmnop'; // 16 half -> mass 8
+  const cfg = { charsPerColumn: 4, columnsPerPage: 5, kinsoku: false, burasage: false };
+  const pages = paginate(tokenize(text), cfg);
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].columns.length, 1);
+  assert.deepEqual(pages[0].columns[0], { start: 0, end: 16 });
+  checkInvariants(pages, text.length);
+});
+
+test('paginator: 列幅より長いルビ親文字でも停止しない', () => {
+  const text = '｜あいうえおかき《ルビ》';
+  const cfg = { charsPerColumn: 3, columnsPerPage: 5, kinsoku: false, burasage: false };
+  const pages = paginate(tokenize(text), cfg);
+  assert.equal(pages[0].columns.length, 1);
+  checkInvariants(pages, text.length);
+});
+
+test('paginator: 禁則ON 行頭に句読点・閉じ括弧が来ない', () => {
+  // 列容量4。境界に 。 が来るように調整
+  const text = 'あいう。えおかき';
+  const cfg = { charsPerColumn: 4, columnsPerPage: 5, kinsoku: true, burasage: false };
+  const pages = paginate(tokenize(text), cfg);
+  checkInvariants(pages, text.length);
+  // 各列の先頭文字が行頭禁則でない
+  for (const p of pages)
+    for (const c of p.columns) {
+      const head = text[c.start];
+      assert.ok(!'、。）」'.includes(head), `col head '${head}' は行頭禁則`);
+    }
+});
+
+test('paginator: ぶら下げONで 。 が列末をはみ出す', () => {
+  const text = 'あいうえ。';
+  const cfg = { charsPerColumn: 4, columnsPerPage: 5, kinsoku: true, burasage: true };
+  const pages = paginate(tokenize(text), cfg);
+  checkInvariants(pages, text.length);
+  // 「。」が最初の列に含まれる（5マス目としてぶら下げ）
+  assert.equal(pages[0].columns[0].end, 5);
+  assert.equal(pages[0].columns.length, 1);
+});
+
+test('paginator: ルビ有無でマス（境界）が一致', () => {
+  const withRuby = '東京《とうきょう》は都';
+  const plain = '東京は都';
+  const cfg = { charsPerColumn: 2, columnsPerPage: 10, kinsoku: false, burasage: false };
+  const colsWith = paginate(tokenize(withRuby), cfg).flatMap((p) => p.columns.length);
+  const colsPlain = paginate(tokenize(plain), cfg).flatMap((p) => p.columns.length);
+  // マス数が同じなので列数が一致
+  assert.equal(colsWith[0], colsPlain[0]);
+});
+
+test('paginator: pageIndexOfOffset', () => {
+  const text = 'あいうえおかきくけこ';
+  const cfg = { charsPerColumn: 4, columnsPerPage: 1, kinsoku: false, burasage: false };
+  const pages = paginate(tokenize(text), cfg);
+  assert.equal(pageIndexOfOffset(pages, 0), 0);
+  assert.equal(pageIndexOfOffset(pages, 5), 1);
+  assert.equal(pageIndexOfOffset(pages, 9), 2);
+});
+
+/* ---------------- warnings ---------------- */
+function codes(text, opt) {
+  return detectWarnings(text, opt).items.map((i) => i.code);
+}
+test('warnings: 字下げ漏れ／会話字下げ／見出し除外', () => {
+  assert.ok(codes('地の文です').includes('indent-missing'));
+  assert.ok(!codes('　地の文です').includes('indent-missing'));
+  assert.ok(!codes('「セリフ」').includes('indent-missing'));
+  assert.ok(codes('　「セリフ」').includes('dialog-indent'));
+  assert.ok(!codes('# 第一章').includes('indent-missing'));
+  const long = 'あいうえおかきくけこさしすせそ';
+  const item = detectWarnings(long).items.find((i) => i.code === 'indent-missing');
+  assert.ok(item);
+  assert.match(item.label, /^字下げ漏れ　あいうえおかきくけこ…$/);
+  assert.equal(long.slice(item.range.start, item.range.end), 'あいうえおかきくけこ');
+});
+test('warnings: 見出しの # と半角スペースは半角警告を出さない', () => {
+  const c = codes('# 第一章');
+  assert.ok(!c.includes('halfwidth'));
+  assert.ok(!c.includes('halfwidth-space'));
+});
+test('warnings: 閉じ括弧前の句点', () => {
+  assert.ok(codes('「そうか。」').includes('period-before-bracket'));
+  assert.ok(!codes('「そうか」').includes('period-before-bracket'));
+});
+test('warnings: ！？ 後のスペース不足', () => {
+  assert.ok(codes('何だと！そんな').includes('no-space-after-bang'));
+  assert.ok(!codes('何だと！　そんな').includes('no-space-after-bang'));
+  assert.ok(!codes('何だと！」').includes('no-space-after-bang'));
+  assert.ok(!codes('何だと！').includes('no-space-after-bang'));
+});
+test('warnings: 三点リーダ／ダッシュの奇数（単体も拾う）', () => {
+  assert.ok(codes('あ…い').includes('odd-leader-dash'));
+  assert.ok(!codes('あ……い').includes('odd-leader-dash'));
+  assert.ok(codes('あ―い').includes('odd-leader-dash'));
+  assert.ok(!codes('あ――い').includes('odd-leader-dash'));
+});
+test('warnings: 半角はラン単位で1件、ルビ内は除外', () => {
+  const one = detectWarnings('ABCあ').items.filter((i) => i.code === 'halfwidth');
+  assert.equal(one.length, 1);
+  assert.deepEqual(one[0].range, { start: 0, end: 3 });
+  assert.ok(!codes('｜A《エー》').includes('halfwidth'));
+});
+test('warnings: 行末空白と半角は重ねない', () => {
+  // 行末の半角スペースだけ → trailing-space のみ（halfwidth / halfwidth-space は出さない）
+  const onlyTrail = detectWarnings('あいう ').items.map((i) => i.code);
+  assert.ok(onlyTrail.includes('trailing-space'));
+  assert.ok(!onlyTrail.includes('halfwidth'));
+  assert.ok(!onlyTrail.includes('halfwidth-space'));
+
+  // 半角語＋行末スペース → halfwidth は語のみ、スペースは trailing-space
+  const mixed = detectWarnings('ABC ').items;
+  const hw = mixed.filter((i) => i.code === 'halfwidth');
+  const tr = mixed.filter((i) => i.code === 'trailing-space');
+  const hs = mixed.filter((i) => i.code === 'halfwidth-space');
+  assert.equal(hw.length, 1);
+  assert.deepEqual(hw[0].range, { start: 0, end: 3 });
+  assert.equal(tr.length, 1);
+  assert.equal(hs.length, 0);
+
+  // 行中の空白のみラン → halfwidth-space 1件（半角文字にはしない）
+  const mid = detectWarnings('あ  い').items;
+  assert.equal(mid.filter((i) => i.code === 'halfwidth-space').length, 1);
+  assert.equal(mid.filter((i) => i.code === 'halfwidth').length, 0);
+  assert.deepEqual(mid.find((i) => i.code === 'halfwidth-space').range, { start: 1, end: 3 });
+});
+test('warnings: 行頭半角スペースは字下げ漏れより先／二重にしない', () => {
+  const items = detectWarnings(' 地の文です').items;
+  const codesInOrder = items.map((i) => i.code);
+  assert.ok(codesInOrder.includes('halfwidth-space'));
+  // 行頭が半角スペースのときは字下げ漏れを出さない（半角を先に直す）
+  assert.ok(!codesInOrder.includes('indent-missing'));
+  // 半角のあとに続く字下げ漏れ行は、半角より後のオフセット順
+  const multi = detectWarnings(' あ\n地の文').items;
+  const iSpace = multi.findIndex((i) => i.code === 'halfwidth-space');
+  const iIndent = multi.findIndex((i) => i.code === 'indent-missing');
+  assert.ok(iSpace >= 0 && iIndent >= 0);
+  assert.ok(iSpace < iIndent, '半角スペースが字下げ漏れより先');
+});
+test('warnings: TAB・行末空白・全角空白のみ行・連続空行', () => {
+  assert.ok(codes('a\tb').includes('tab'));
+  assert.ok(codes('あいう　').includes('trailing-space'));
+  assert.ok(codes('　　').includes('fullspace-only-line'));
+  assert.ok(codes('あ\n\n\nい').includes('consecutive-blank'));
+});
+test('warnings: ルビOFFで ruby-off、severity は info', () => {
+  const r = detectWarnings('東京《とうきょう》', { showRuby: false });
+  const off = r.items.filter((i) => i.code === 'ruby-off');
+  assert.equal(off.length, 1);
+  assert.equal(off[0].severity, 'info');
+  assert.ok(!codes('東京《とうきょう》', { showRuby: true }).includes('ruby-off'));
+});
+test('warnings: ルビ構文エラー', () => {
+  assert.ok(codes('《》').includes('ruby-syntax-error'));
+  assert.ok(codes('漢字《ルビ').includes('ruby-syntax-error'));
+  assert.ok(codes('｜漢字です').includes('ruby-syntax-error'));
+  assert.ok(!codes('漢字《かんじ》').includes('ruby-syntax-error'));
+});
+test('warnings: 上限と total', () => {
+  const text = 'a\n'.repeat(2000); // 半角aが2000ラン
+  const r = detectWarnings(text, { limit: 100, enabled: new Set(['halfwidth']) });
+  assert.equal(r.items.length, 100);
+  assert.ok(r.total >= 2000);
+});
+
+/* ---------------- search ---------------- */
+test('search: 全文・見出し', () => {
+  const text = '# 章タイトル\n本文に章がある。章は続く。';
+  assert.equal(searchAll(text, '章').total, 3);
+  const h = searchAll(text, '章', { headingOnly: true });
+  assert.equal(h.total, 1);
+});
+
+/* ---------------- position ---------------- */
+test('position: 編集で文字数が変わっても近傍復帰', () => {
+  const original = 'ゼロ。' + 'あ'.repeat(50) + '目印テキスト' + 'い'.repeat(50);
+  const off = original.indexOf('目印テキスト');
+  const rec = makeRecord(original, off);
+  // 冒頭に文字を挿入して文字数を変える
+  const edited = '＝追加＝' + original;
+  const restored = restoreOffset(edited, rec);
+  assert.equal(edited.slice(restored, restored + 6), '目印テキスト');
+});
+test('position: 見つからなければクランプ', () => {
+  const rec = makeRecord('あいうえお', 3);
+  const restored = restoreOffset('まったく別の内容', rec);
+  assert.ok(restored >= 0 && restored <= 'まったく別の内容'.length);
+});
