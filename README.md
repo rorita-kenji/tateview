@@ -1,4 +1,4 @@
-# 縦View（TateView）— 縦書き小説ビューア
+# 縦view（TateView）— 縦書き小説ビューア
 
 バージョン **v0.9**。配布ファイル名は `TateView.html`。  
 作者: [やまもりやもり](https://yamamori-yamori.github.io/mypage/)
