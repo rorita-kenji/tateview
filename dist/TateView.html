@@ -240,7 +240,7 @@ aside {
   width: 0; overflow: hidden; background: var(--panel); border-left: 1px solid var(--border);
   transition: width 0.15s; display: flex; flex-direction: column;
 }
-body.panel-open aside { width: 280px; }
+body.panel-open aside { width: 240px; }
 aside .section { padding: 8px 10px; border-bottom: 1px solid var(--border); }
 aside h2 { font-size: 13px; margin: 0 0 6px; }
 #warnList { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
@@ -816,7 +816,7 @@ const WARNING_LABELS = {
   'dialog-indent': '会話文の不要な字下げ',
   'period-before-bracket': '閉じ括弧前の句点',
   'no-space-after-bang': '！？後のスペース不足',
-  'odd-leader-dash': '三点リーダ／ダッシュが偶数でない',
+  'odd-leader-dash': '三点リーダ／ダッシュが奇数',
   halfwidth: '半角文字',
   'ruby-off': 'ルビ非表示箇所',
   tab: 'TAB文字',
@@ -1832,7 +1832,7 @@ const WARNING_LABELS = {
   'dialog-indent': '会話文の不要な字下げ',
   'period-before-bracket': '閉じ括弧前の句点',
   'no-space-after-bang': '！？後のスペース不足',
-  'odd-leader-dash': '三点リーダ／ダッシュが偶数でない',
+  'odd-leader-dash': '三点リーダ／ダッシュが奇数',
   halfwidth: '半角文字',
   'ruby-off': 'ルビ非表示箇所',
   tab: 'TAB文字',

@@ -7,7 +7,7 @@ export const WARNING_LABELS = {
   'dialog-indent': '会話文の不要な字下げ',
   'period-before-bracket': '閉じ括弧前の句点',
   'no-space-after-bang': '！？後のスペース不足',
-  'odd-leader-dash': '三点リーダ／ダッシュが偶数でない',
+  'odd-leader-dash': '三点リーダ／ダッシュが奇数',
   halfwidth: '半角文字',
   'ruby-off': 'ルビ非表示箇所',
   tab: 'TAB文字',
