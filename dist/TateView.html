@@ -18,7 +18,7 @@
   --mark: #ffe58a;
   --heading1: #b0392f;
   --heading2: #2f6bb0;
-  --grid: #c9c1ad;
+  --grid: #ddd6c4;
 }
 :root[data-theme='dark'] {
   --bg: #1b1c1e;
@@ -32,7 +32,7 @@
   --mark: #6b5a1e;
   --heading1: #ff8a7a;
   --heading2: #8ab6ff;
-  --grid: #45474b;
+  --grid: #3a3c40;
 }
 :root[data-font='mincho'] { --font: 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'MS Mincho', serif; }
 :root[data-font='gothic'] { --font: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif; }
@@ -2494,16 +2494,16 @@ const POS_PREFIX = 'tategaki-position:';
 
 const PRESETS = [
   { name: '20字 × 20行（400字）', charsPerColumn: 20, columnsPerPage: 20 },
-  { name: '40字 × 18行（720字）', charsPerColumn: 40, columnsPerPage: 18 },
-  { name: '42字 × 18行（756字）', charsPerColumn: 42, columnsPerPage: 18 },
-  { name: '40字 × 20行（800字）', charsPerColumn: 40, columnsPerPage: 20 },
-  { name: '42字 × 20行（840字）', charsPerColumn: 42, columnsPerPage: 20 },
+  { name: '40字 × 16行（640字）', charsPerColumn: 40, columnsPerPage: 16 },
+  { name: '40字 × 32行（1280字）', charsPerColumn: 40, columnsPerPage: 32 },
+  { name: '40字 × 34行（1360字）', charsPerColumn: 40, columnsPerPage: 34 },
+  { name: '42字 × 34行（1428字）', charsPerColumn: 42, columnsPerPage: 34 },
 ];
 
 const DEFAULT_SETTINGS = {
   presetIndex: 1,
   charsPerColumn: 40,
-  columnsPerPage: 18,
+  columnsPerPage: 16,
   theme: 'light',
   fontFamily: 'mincho',
   fontSize: 20,

@@ -11,7 +11,7 @@
   --mark: #ffe58a;
   --heading1: #b0392f;
   --heading2: #2f6bb0;
-  --grid: #c9c1ad;
+  --grid: #ddd6c4;
 }
 :root[data-theme='dark'] {
   --bg: #1b1c1e;
@@ -25,7 +25,7 @@
   --mark: #6b5a1e;
   --heading1: #ff8a7a;
   --heading2: #8ab6ff;
-  --grid: #45474b;
+  --grid: #3a3c40;
 }
 :root[data-font='mincho'] { --font: 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'MS Mincho', serif; }
 :root[data-font='gothic'] { --font: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif; }
