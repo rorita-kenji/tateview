@@ -1,10 +1,12 @@
 // search.js — 全文・見出し検索（UTF-16 半開区間）
 
+import { isHeadingLine, resolveHeadingMarks } from './heading.js';
+
 /**
  * 全一致検索（大小文字区別）。
  * @param {string} text
  * @param {string} query
- * @param {{ headingOnly?:boolean, limit?:number }} [opt]
+ * @param {{ headingOnly?:boolean, limit?:number, chapterMark?:string, episodeMark?:string, headingMarks?:{chapter:string,episode:string} }} [opt]
  * @returns {{ matches:{start:number,end:number}[], total:number }}
  */
 export function searchAll(text, query, opt = {}) {
@@ -14,9 +16,10 @@ export function searchAll(text, query, opt = {}) {
   if (!query) return { matches, total: 0 };
 
   if (opt.headingOnly) {
+    const headingMarks = resolveHeadingMarks(opt.headingMarks || opt);
     let lineStart = 0;
     for (const line of text.split('\n')) {
-      if (/^#{1,2}(?:\s|$)/.test(line)) {
+      if (isHeadingLine(line, headingMarks)) {
         collect(line, query, lineStart, matches, () => total++, limit);
       }
       lineStart += line.length + 1;

@@ -41,6 +41,8 @@ self.onmessage = (e) => {
       const { items, total } = detectWarnings(currentText, {
         showRuby: payload.showRuby,
         enabled: payload.enabled ? new Set(payload.enabled) : null,
+        chapterMark: payload.chapterMark,
+        episodeMark: payload.episodeMark,
       });
       post({ documentId, requestId, type: 'warnings', payload: { items, total } });
       return;
@@ -48,7 +50,11 @@ self.onmessage = (e) => {
 
     if (type === 'search') {
       if (documentId !== currentDocId) return;
-      const { matches, total } = searchAll(currentText, payload.query, { headingOnly: payload.headingOnly });
+      const { matches, total } = searchAll(currentText, payload.query, {
+        headingOnly: payload.headingOnly,
+        chapterMark: payload.chapterMark,
+        episodeMark: payload.episodeMark,
+      });
       post({ documentId, requestId, type: 'searchResult', payload: { matches, total } });
       return;
     }

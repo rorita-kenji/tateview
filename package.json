@@ -1,1 +1,1 @@
-{"name":"tategaki-viewer","version":"0.9.0","type":"module","private":true,"scripts":{"test":"node --test","build":"node build.js"}}
+{"name":"tategaki-viewer","version":"1.0.0","type":"module","private":true,"scripts":{"test":"node --test","build":"node build.js"}}

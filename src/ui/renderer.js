@@ -158,8 +158,7 @@ function appendSpaceColored(parent, text, opt) {
   }
 }
 
-/** 見出し行の着色は本文と組版を変えないため、行頭が #/## のトークン列にクラスを付ける処理は
- *  main 側で行頭検出して colEl にマーカーを足す簡易実装とする（ここでは範囲ハイライトのみ）。 */
+/** 見出し行の着色は本文と組版を変えないため、行頭マーカー（設定の章/話記号）の判定は main 側で行う（ここでは範囲ハイライトのみ）。 */
 
 function highlightHit(ranges, s, e) {
   // 後勝ち（warn を search より後に push すれば warn 優先）

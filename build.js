@@ -10,7 +10,7 @@ const DIST = join(__dirname, 'dist', 'TateView.html');
 
 // 依存順の登録リスト（キーは basename）
 const ENGINE = ['modules/normalize', 'modules/encoding', 'modules/kinsoku', 'modules/tokenizer',
-  'modules/paginator', 'modules/warnings', 'modules/search', 'modules/position'];
+  'modules/paginator', 'modules/heading', 'modules/warnings', 'modules/search', 'modules/position'];
 const UI = ['ui/renderer', 'ui/settings'];
 
 /** モジュールを __mods 登録用の定義文字列へ変換 */

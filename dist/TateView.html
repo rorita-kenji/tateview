@@ -88,6 +88,42 @@ main { flex: 1; display: flex; min-height: 0; }
   width: 168px; flex: 0 0 auto; display: flex; flex-direction: column;
   background: var(--panel); border-right: 1px solid var(--border); min-height: 0;
 }
+/* 章/話記号バー（サムネの上・常時1行） */
+#markBar.mark-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 4px;
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  line-height: 1.2;
+  min-width: 0;
+}
+#markBar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  white-space: nowrap;
+  font-weight: 700;
+}
+#markBar .mark-ch { color: var(--heading1); }
+#markBar .mark-ep { color: var(--heading2); }
+#markBar input[type='text'] {
+  width: 2.2em;
+  min-width: 1.6em;
+  max-width: 3.2em;
+  padding: 1px 2px;
+  font-size: 10px;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  text-align: center;
+  font-weight: 700;
+}
+#markBar .mark-ch input { color: var(--heading1); }
+#markBar .mark-ep input { color: var(--heading2); }
 #thumbs {
   flex: 1 1 auto; overflow-y: auto; overflow-x: hidden;
   padding: 4px; user-select: none;
@@ -360,6 +396,11 @@ footer .spacer { flex: 1; }
 
   <main>
     <div id="sidebar">
+      <!-- 章/話記号: サムネ有無に関わらず常時表示（1行） -->
+      <div id="markBar" class="mark-bar" title="行頭（半角/全角スペースのみ可）の見出し記号">
+        <label class="mark-ch">章記号：<input id="chapterMark" type="text" value="#" maxlength="16" spellcheck="false" autocomplete="off" /></label>
+        <label class="mark-ep">話記号：<input id="episodeMark" type="text" value="##" maxlength="16" spellcheck="false" autocomplete="off" /></label>
+      </div>
       <div id="thumbs" title="ドラッグでページ移動"></div>
       <!-- 左メニュー: ページ移動 + 表示設定 -->
       <div id="controls">
@@ -392,7 +433,7 @@ footer .spacer { flex: 1; }
           <select id="fontSize" title="字級"></select>
         </div>
         <div id="appCredit" class="app-credit">
-          <span>v0.9</span>
+          <span>v1.0</span>
           <span>by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
         </div>
       </div>
@@ -842,11 +883,211 @@ function pageIndexOfOffset(pages, offset) {
 return { paginate, pageIndexOfOffset };
 })();
 
+__mods['heading'] = (function(){ 'use strict';
+// heading.js — 章/話マーカー判定（設定で変更可能）
+// 既定: 章='#', 話='##'。
+// 行頭からマーカー直前までが半角/全角スペースのみのとき見出し（他文字を挟むと本文）。
+// 見出しは改行まで。次の行から本文。
+
+/**
+ * @typedef {{ chapter: string, episode: string }} HeadingMarks
+ */
+
+/**
+ * @typedef {{
+ *   level: 1|2,
+ *   markStart: number,
+ *   markEnd: number,
+ *   prefixEnd: number,
+ *   prefixLen: number
+ * }} HeadingMatch
+ */
+
+/** @type {HeadingMarks} */
+const DEFAULT_HEADING_MARKS = Object.freeze({ chapter: '#', episode: '##' });
+
+/**
+ * 設定オブジェクトから正規化した章/話マーカーを得る。空は既定に戻す。
+ * @param {{ chapterMark?: string, episodeMark?: string, chapter?: string, episode?: string }|null|undefined} src
+ * @returns {HeadingMarks}
+ */
+function resolveHeadingMarks(src = {}) {
+  const s = src || {};
+  let chapter = s.chapterMark != null ? String(s.chapterMark) : s.chapter != null ? String(s.chapter) : DEFAULT_HEADING_MARKS.chapter;
+  let episode = s.episodeMark != null ? String(s.episodeMark) : s.episode != null ? String(s.episode) : DEFAULT_HEADING_MARKS.episode;
+  if (!chapter) chapter = DEFAULT_HEADING_MARKS.chapter;
+  if (!episode) episode = DEFAULT_HEADING_MARKS.episode;
+  return { chapter, episode };
+}
+
+/**
+ * 行の見出しマーカーを探す。
+ * 条件: 行頭〜マーカー直前が半角スペース(U+0020)または全角スペース(U+3000)のみ
+ * （他の文字を挟むと見出しにしない）。
+ * 複数候補は「出現位置が早い方」、同位置なら長いマーカー、同一長なら話(2)を優先。
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @returns {HeadingMatch|null}
+ */
+function matchHeadingInLine(line, marks) {
+  const m = resolveHeadingMarks(marks);
+  /** @type {{ level: 1|2, mark: string }[]} */
+  const cands = [
+    { level: 2, mark: m.episode },
+    { level: 1, mark: m.chapter },
+  ];
+  cands.sort((a, b) => {
+    if (b.mark.length !== a.mark.length) return b.mark.length - a.mark.length;
+    return b.level - a.level;
+  });
+
+  /** @type {HeadingMatch|null} */
+  let best = null;
+  for (const c of cands) {
+    if (!c.mark) continue;
+    let from = 0;
+    while (from <= line.length - c.mark.length) {
+      const idx = line.indexOf(c.mark, from);
+      if (idx === -1) break;
+      // 行頭〜マーカー直前は半角/全角スペースのみ
+      if (!isOnlyLeadingSpaces(line, idx)) {
+        from = idx + 1;
+        continue;
+      }
+      if (!isValidAfterMarkAt(line, idx, c.mark)) {
+        from = idx + 1;
+        continue;
+      }
+      let prefixEnd = idx + c.mark.length;
+      // 半角警告除外用: 直後の半角スペース1つまで
+      if (line[prefixEnd] === ' ') prefixEnd += 1;
+      /** @type {HeadingMatch} */
+      const hit = {
+        level: c.level,
+        markStart: idx,
+        markEnd: idx + c.mark.length,
+        prefixEnd,
+        prefixLen: prefixEnd,
+      };
+      if (
+        !best ||
+        hit.markStart < best.markStart ||
+        (hit.markStart === best.markStart && c.mark.length > best.markEnd - best.markStart) ||
+        (hit.markStart === best.markStart &&
+          c.mark.length === best.markEnd - best.markStart &&
+          hit.level > best.level)
+      ) {
+        best = hit;
+      }
+      break; // このマーカー種別は最初の有効位置のみ
+    }
+  }
+  return best;
+}
+
+/**
+ * line[0..idx) が半角/全角スペースのみか。
+ * @param {string} line
+ * @param {number} idx
+ */
+function isOnlyLeadingSpaces(line, idx) {
+  for (let i = 0; i < idx; i++) {
+    const ch = line[i];
+    if (ch !== ' ' && ch !== '　') return false;
+  }
+  return true;
+}
+
+/**
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @returns {HeadingMatch|null}
+ */
+function matchHeadingPrefix(line, marks) {
+  return matchHeadingInLine(line, marks);
+}
+
+/**
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @returns {boolean}
+ */
+function isHeadingLine(line, marks) {
+  return matchHeadingInLine(line, marks) != null;
+}
+
+/**
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @returns {0|1|2}
+ */
+function headingLevel(line, marks) {
+  const m = matchHeadingInLine(line, marks);
+  return m ? m.level : 0;
+}
+
+/**
+ * 見出し行のタイトル文字列（マーカー以降。長すぎる場合は maxLen で切る）。
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @param {number} [maxLen=24]
+ * @returns {{ level: 1|2, text: string }|null}
+ */
+function headingTitle(line, marks, maxLen = 24) {
+  const hit = matchHeadingInLine(line, marks);
+  if (!hit) return null;
+  let title = line.slice(hit.prefixEnd).replace(/^[\s　]+/, '');
+  if (!title) title = line.trim() || line;
+  if (maxLen > 0 && title.length > maxLen) title = title.slice(0, maxLen);
+  return { level: hit.level, text: title };
+}
+
+/**
+ * 見出しマーカー範囲（半角警告除外用）を集める。
+ * @param {string} text
+ * @param {HeadingMarks} [marks]
+ * @returns {{ start: number, end: number }[]}
+ */
+function collectHeadingPrefixRanges(text, marks) {
+  const m = resolveHeadingMarks(marks);
+  const ranges = [];
+  let lineStart = 0;
+  for (const line of text.split('\n')) {
+    const hit = matchHeadingInLine(line, m);
+    if (hit) {
+      ranges.push({ start: lineStart + hit.markStart, end: lineStart + hit.prefixEnd });
+    }
+    lineStart += line.length + 1;
+  }
+  return ranges;
+}
+
+/**
+ * マーカー直後が有効か（idx はマーカー開始位置）。
+ * @param {string} line
+ * @param {number} idx
+ * @param {string} mark
+ */
+function isValidAfterMarkAt(line, idx, mark) {
+  const after = idx + mark.length;
+  if (after >= line.length) return true;
+  const next = line[after];
+  if (next === '　' || /\s/.test(next)) return true;
+  if (/^#+$/.test(mark)) {
+    return next === '#';
+  }
+  return true;
+}
+
+return { resolveHeadingMarks, matchHeadingInLine, matchHeadingPrefix, isHeadingLine, headingLevel, headingTitle, collectHeadingPrefixRanges, DEFAULT_HEADING_MARKS };
+})();
+
 __mods['warnings'] = (function(){ 'use strict';
 // warnings.js — 校正ワーニング検出
 // 位置は正規化テキスト上の UTF-16 半開区間 [start,end)。
 // 半角ラン単位で集約、見出しプレフィックス・ルビ内は半角警告から除外、severity 付き。
 
+const {collectHeadingPrefixRanges, isHeadingLine, resolveHeadingMarks} = __mods['heading'];
 const WARNING_LABELS = {
   'indent-missing': '字下げ漏れ',
   'dialog-indent': '会話文の不要な字下げ',
@@ -891,7 +1132,7 @@ const DEFAULT_LIMIT = 1000;
 
 /**
  * @param {string} text
- * @param {{ showRuby?:boolean, enabled?:Set<string>, limit?:number }} [opt]
+ * @param {{ showRuby?:boolean, enabled?:Set<string>, limit?:number, chapterMark?:string, episodeMark?:string, headingMarks?:{chapter:string,episode:string} }} [opt]
  * @returns {{ items:{code,label,severity,range:{start,end}}[], total:number }}
  */
 function detectWarnings(text, opt = {}) {
@@ -899,9 +1140,10 @@ function detectWarnings(text, opt = {}) {
   const enabled = opt.enabled || null;
   const limit = opt.limit || DEFAULT_LIMIT;
   const on = (code) => (enabled ? enabled.has(code) : true);
+  const headingMarks = resolveHeadingMarks(opt.headingMarks || opt);
 
   const rubyRanges = collectRubyRanges(text);
-  const headingPrefixRanges = collectHeadingPrefixRanges(text);
+  const headingPrefixRanges = collectHeadingPrefixRanges(text, headingMarks);
   const excluded = (pos) =>
     inAny(rubyRanges, pos) || inAny(headingPrefixRanges, pos);
 
@@ -931,7 +1173,7 @@ function detectWarnings(text, opt = {}) {
     const start = lineStart;
     lineStart += line.length + 1; // +1 は \n
 
-    const isHeading = /^#{1,2}(?:\s|$)/.test(line);
+    const isHeading = isHeadingLine(line, headingMarks);
 
     if (on('fullspace-only-line') && line.length > 0 && /^　+$/.test(line)) {
       add('fullspace-only-line', start, start + line.length);
@@ -1171,17 +1413,6 @@ function collectRubyRanges(text) {
   return ranges.sort((a, b) => a.start - b.start);
 }
 
-function collectHeadingPrefixRanges(text) {
-  const ranges = [];
-  let lineStart = 0;
-  for (const line of text.split('\n')) {
-    const m = /^#{1,2}\s?/.exec(line);
-    if (m) ranges.push({ start: lineStart, end: lineStart + m[0].length });
-    lineStart += line.length + 1;
-  }
-  return ranges;
-}
-
 function inAny(ranges, pos) {
   for (const r of ranges) {
     if (pos >= r.start && pos < r.end) return true;
@@ -1220,11 +1451,12 @@ return { detectWarnings, WARNING_LABELS };
 __mods['search'] = (function(){ 'use strict';
 // search.js — 全文・見出し検索（UTF-16 半開区間）
 
+const {isHeadingLine, resolveHeadingMarks} = __mods['heading'];
 /**
  * 全一致検索（大小文字区別）。
  * @param {string} text
  * @param {string} query
- * @param {{ headingOnly?:boolean, limit?:number }} [opt]
+ * @param {{ headingOnly?:boolean, limit?:number, chapterMark?:string, episodeMark?:string, headingMarks?:{chapter:string,episode:string} }} [opt]
  * @returns {{ matches:{start:number,end:number}[], total:number }}
  */
 function searchAll(text, query, opt = {}) {
@@ -1234,9 +1466,10 @@ function searchAll(text, query, opt = {}) {
   if (!query) return { matches, total: 0 };
 
   if (opt.headingOnly) {
+    const headingMarks = resolveHeadingMarks(opt.headingMarks || opt);
     let lineStart = 0;
     for (const line of text.split('\n')) {
-      if (/^#{1,2}(?:\s|$)/.test(line)) {
+      if (isHeadingLine(line, headingMarks)) {
         collect(line, query, lineStart, matches, () => total++, limit);
       }
       lineStart += line.length + 1;
@@ -1374,6 +1607,8 @@ self.onmessage = (e) => {
       const { items, total } = detectWarnings(currentText, {
         showRuby: payload.showRuby,
         enabled: payload.enabled ? new Set(payload.enabled) : null,
+        chapterMark: payload.chapterMark,
+        episodeMark: payload.episodeMark,
       });
       post({ documentId, requestId, type: 'warnings', payload: { items, total } });
       return;
@@ -1381,7 +1616,11 @@ self.onmessage = (e) => {
 
     if (type === 'search') {
       if (documentId !== currentDocId) return;
-      const { matches, total } = searchAll(currentText, payload.query, { headingOnly: payload.headingOnly });
+      const { matches, total } = searchAll(currentText, payload.query, {
+        headingOnly: payload.headingOnly,
+        chapterMark: payload.chapterMark,
+        episodeMark: payload.episodeMark,
+      });
       post({ documentId, requestId, type: 'searchResult', payload: { matches, total } });
       return;
     }
@@ -1858,11 +2097,211 @@ function pageIndexOfOffset(pages, offset) {
 return { paginate, pageIndexOfOffset };
 })();
 
+__mods['heading'] = (function(){ 'use strict';
+// heading.js — 章/話マーカー判定（設定で変更可能）
+// 既定: 章='#', 話='##'。
+// 行頭からマーカー直前までが半角/全角スペースのみのとき見出し（他文字を挟むと本文）。
+// 見出しは改行まで。次の行から本文。
+
+/**
+ * @typedef {{ chapter: string, episode: string }} HeadingMarks
+ */
+
+/**
+ * @typedef {{
+ *   level: 1|2,
+ *   markStart: number,
+ *   markEnd: number,
+ *   prefixEnd: number,
+ *   prefixLen: number
+ * }} HeadingMatch
+ */
+
+/** @type {HeadingMarks} */
+const DEFAULT_HEADING_MARKS = Object.freeze({ chapter: '#', episode: '##' });
+
+/**
+ * 設定オブジェクトから正規化した章/話マーカーを得る。空は既定に戻す。
+ * @param {{ chapterMark?: string, episodeMark?: string, chapter?: string, episode?: string }|null|undefined} src
+ * @returns {HeadingMarks}
+ */
+function resolveHeadingMarks(src = {}) {
+  const s = src || {};
+  let chapter = s.chapterMark != null ? String(s.chapterMark) : s.chapter != null ? String(s.chapter) : DEFAULT_HEADING_MARKS.chapter;
+  let episode = s.episodeMark != null ? String(s.episodeMark) : s.episode != null ? String(s.episode) : DEFAULT_HEADING_MARKS.episode;
+  if (!chapter) chapter = DEFAULT_HEADING_MARKS.chapter;
+  if (!episode) episode = DEFAULT_HEADING_MARKS.episode;
+  return { chapter, episode };
+}
+
+/**
+ * 行の見出しマーカーを探す。
+ * 条件: 行頭〜マーカー直前が半角スペース(U+0020)または全角スペース(U+3000)のみ
+ * （他の文字を挟むと見出しにしない）。
+ * 複数候補は「出現位置が早い方」、同位置なら長いマーカー、同一長なら話(2)を優先。
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @returns {HeadingMatch|null}
+ */
+function matchHeadingInLine(line, marks) {
+  const m = resolveHeadingMarks(marks);
+  /** @type {{ level: 1|2, mark: string }[]} */
+  const cands = [
+    { level: 2, mark: m.episode },
+    { level: 1, mark: m.chapter },
+  ];
+  cands.sort((a, b) => {
+    if (b.mark.length !== a.mark.length) return b.mark.length - a.mark.length;
+    return b.level - a.level;
+  });
+
+  /** @type {HeadingMatch|null} */
+  let best = null;
+  for (const c of cands) {
+    if (!c.mark) continue;
+    let from = 0;
+    while (from <= line.length - c.mark.length) {
+      const idx = line.indexOf(c.mark, from);
+      if (idx === -1) break;
+      // 行頭〜マーカー直前は半角/全角スペースのみ
+      if (!isOnlyLeadingSpaces(line, idx)) {
+        from = idx + 1;
+        continue;
+      }
+      if (!isValidAfterMarkAt(line, idx, c.mark)) {
+        from = idx + 1;
+        continue;
+      }
+      let prefixEnd = idx + c.mark.length;
+      // 半角警告除外用: 直後の半角スペース1つまで
+      if (line[prefixEnd] === ' ') prefixEnd += 1;
+      /** @type {HeadingMatch} */
+      const hit = {
+        level: c.level,
+        markStart: idx,
+        markEnd: idx + c.mark.length,
+        prefixEnd,
+        prefixLen: prefixEnd,
+      };
+      if (
+        !best ||
+        hit.markStart < best.markStart ||
+        (hit.markStart === best.markStart && c.mark.length > best.markEnd - best.markStart) ||
+        (hit.markStart === best.markStart &&
+          c.mark.length === best.markEnd - best.markStart &&
+          hit.level > best.level)
+      ) {
+        best = hit;
+      }
+      break; // このマーカー種別は最初の有効位置のみ
+    }
+  }
+  return best;
+}
+
+/**
+ * line[0..idx) が半角/全角スペースのみか。
+ * @param {string} line
+ * @param {number} idx
+ */
+function isOnlyLeadingSpaces(line, idx) {
+  for (let i = 0; i < idx; i++) {
+    const ch = line[i];
+    if (ch !== ' ' && ch !== '　') return false;
+  }
+  return true;
+}
+
+/**
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @returns {HeadingMatch|null}
+ */
+function matchHeadingPrefix(line, marks) {
+  return matchHeadingInLine(line, marks);
+}
+
+/**
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @returns {boolean}
+ */
+function isHeadingLine(line, marks) {
+  return matchHeadingInLine(line, marks) != null;
+}
+
+/**
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @returns {0|1|2}
+ */
+function headingLevel(line, marks) {
+  const m = matchHeadingInLine(line, marks);
+  return m ? m.level : 0;
+}
+
+/**
+ * 見出し行のタイトル文字列（マーカー以降。長すぎる場合は maxLen で切る）。
+ * @param {string} line
+ * @param {HeadingMarks} marks
+ * @param {number} [maxLen=24]
+ * @returns {{ level: 1|2, text: string }|null}
+ */
+function headingTitle(line, marks, maxLen = 24) {
+  const hit = matchHeadingInLine(line, marks);
+  if (!hit) return null;
+  let title = line.slice(hit.prefixEnd).replace(/^[\s　]+/, '');
+  if (!title) title = line.trim() || line;
+  if (maxLen > 0 && title.length > maxLen) title = title.slice(0, maxLen);
+  return { level: hit.level, text: title };
+}
+
+/**
+ * 見出しマーカー範囲（半角警告除外用）を集める。
+ * @param {string} text
+ * @param {HeadingMarks} [marks]
+ * @returns {{ start: number, end: number }[]}
+ */
+function collectHeadingPrefixRanges(text, marks) {
+  const m = resolveHeadingMarks(marks);
+  const ranges = [];
+  let lineStart = 0;
+  for (const line of text.split('\n')) {
+    const hit = matchHeadingInLine(line, m);
+    if (hit) {
+      ranges.push({ start: lineStart + hit.markStart, end: lineStart + hit.prefixEnd });
+    }
+    lineStart += line.length + 1;
+  }
+  return ranges;
+}
+
+/**
+ * マーカー直後が有効か（idx はマーカー開始位置）。
+ * @param {string} line
+ * @param {number} idx
+ * @param {string} mark
+ */
+function isValidAfterMarkAt(line, idx, mark) {
+  const after = idx + mark.length;
+  if (after >= line.length) return true;
+  const next = line[after];
+  if (next === '　' || /\s/.test(next)) return true;
+  if (/^#+$/.test(mark)) {
+    return next === '#';
+  }
+  return true;
+}
+
+return { resolveHeadingMarks, matchHeadingInLine, matchHeadingPrefix, isHeadingLine, headingLevel, headingTitle, collectHeadingPrefixRanges, DEFAULT_HEADING_MARKS };
+})();
+
 __mods['warnings'] = (function(){ 'use strict';
 // warnings.js — 校正ワーニング検出
 // 位置は正規化テキスト上の UTF-16 半開区間 [start,end)。
 // 半角ラン単位で集約、見出しプレフィックス・ルビ内は半角警告から除外、severity 付き。
 
+const {collectHeadingPrefixRanges, isHeadingLine, resolveHeadingMarks} = __mods['heading'];
 const WARNING_LABELS = {
   'indent-missing': '字下げ漏れ',
   'dialog-indent': '会話文の不要な字下げ',
@@ -1907,7 +2346,7 @@ const DEFAULT_LIMIT = 1000;
 
 /**
  * @param {string} text
- * @param {{ showRuby?:boolean, enabled?:Set<string>, limit?:number }} [opt]
+ * @param {{ showRuby?:boolean, enabled?:Set<string>, limit?:number, chapterMark?:string, episodeMark?:string, headingMarks?:{chapter:string,episode:string} }} [opt]
  * @returns {{ items:{code,label,severity,range:{start,end}}[], total:number }}
  */
 function detectWarnings(text, opt = {}) {
@@ -1915,9 +2354,10 @@ function detectWarnings(text, opt = {}) {
   const enabled = opt.enabled || null;
   const limit = opt.limit || DEFAULT_LIMIT;
   const on = (code) => (enabled ? enabled.has(code) : true);
+  const headingMarks = resolveHeadingMarks(opt.headingMarks || opt);
 
   const rubyRanges = collectRubyRanges(text);
-  const headingPrefixRanges = collectHeadingPrefixRanges(text);
+  const headingPrefixRanges = collectHeadingPrefixRanges(text, headingMarks);
   const excluded = (pos) =>
     inAny(rubyRanges, pos) || inAny(headingPrefixRanges, pos);
 
@@ -1947,7 +2387,7 @@ function detectWarnings(text, opt = {}) {
     const start = lineStart;
     lineStart += line.length + 1; // +1 は \n
 
-    const isHeading = /^#{1,2}(?:\s|$)/.test(line);
+    const isHeading = isHeadingLine(line, headingMarks);
 
     if (on('fullspace-only-line') && line.length > 0 && /^　+$/.test(line)) {
       add('fullspace-only-line', start, start + line.length);
@@ -2187,17 +2627,6 @@ function collectRubyRanges(text) {
   return ranges.sort((a, b) => a.start - b.start);
 }
 
-function collectHeadingPrefixRanges(text) {
-  const ranges = [];
-  let lineStart = 0;
-  for (const line of text.split('\n')) {
-    const m = /^#{1,2}\s?/.exec(line);
-    if (m) ranges.push({ start: lineStart, end: lineStart + m[0].length });
-    lineStart += line.length + 1;
-  }
-  return ranges;
-}
-
 function inAny(ranges, pos) {
   for (const r of ranges) {
     if (pos >= r.start && pos < r.end) return true;
@@ -2236,11 +2665,12 @@ return { detectWarnings, WARNING_LABELS };
 __mods['search'] = (function(){ 'use strict';
 // search.js — 全文・見出し検索（UTF-16 半開区間）
 
+const {isHeadingLine, resolveHeadingMarks} = __mods['heading'];
 /**
  * 全一致検索（大小文字区別）。
  * @param {string} text
  * @param {string} query
- * @param {{ headingOnly?:boolean, limit?:number }} [opt]
+ * @param {{ headingOnly?:boolean, limit?:number, chapterMark?:string, episodeMark?:string, headingMarks?:{chapter:string,episode:string} }} [opt]
  * @returns {{ matches:{start:number,end:number}[], total:number }}
  */
 function searchAll(text, query, opt = {}) {
@@ -2250,9 +2680,10 @@ function searchAll(text, query, opt = {}) {
   if (!query) return { matches, total: 0 };
 
   if (opt.headingOnly) {
+    const headingMarks = resolveHeadingMarks(opt.headingMarks || opt);
     let lineStart = 0;
     for (const line of text.split('\n')) {
-      if (/^#{1,2}(?:\s|$)/.test(line)) {
+      if (isHeadingLine(line, headingMarks)) {
         collect(line, query, lineStart, matches, () => total++, limit);
       }
       lineStart += line.length + 1;
@@ -2507,8 +2938,7 @@ function appendSpaceColored(parent, text, opt) {
   }
 }
 
-/** 見出し行の着色は本文と組版を変えないため、行頭が #/## のトークン列にクラスを付ける処理は
- *  main 側で行頭検出して colEl にマーカーを足す簡易実装とする（ここでは範囲ハイライトのみ）。 */
+/** 見出し行の着色は本文と組版を変えないため、行頭マーカー（設定の章/話記号）の判定は main 側で行う（ここでは範囲ハイライトのみ）。 */
 
 function highlightHit(ranges, s, e) {
   // 後勝ち（warn を search より後に push すれば warn 優先）
@@ -2550,6 +2980,10 @@ const DEFAULT_SETTINGS = {
   halfColor: true,
   spaceColor: false,
   gridLines: false,
+  /** 章見出しの行頭記号（既定 `#`） */
+  chapterMark: '#',
+  /** 話見出しの行頭記号（既定 `##`） */
+  episodeMark: '##',
 };
 
 function loadSettings() {
@@ -2592,6 +3026,7 @@ return { loadSettings, saveSettings, savePosition, loadPosition, PRESETS, DEFAUL
 (function(){ 'use strict';
 // main.js — メインスレッドの統括
 const {pageIndexOfOffset} = __mods['paginator'];
+const {headingLevel, headingTitle, resolveHeadingMarks} = __mods['heading'];
 const {renderPage} = __mods['renderer'];
 const {PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition,} = __mods['settings'];
 const $ = (id) => document.getElementById(id);
@@ -2735,7 +3170,12 @@ function requestPaginate() {
   send('paginate', { config: currentConfig() });
 }
 function requestWarnings() {
-  send('detectWarnings', { showRuby: state.settings.showRuby, enabled: null });
+  send('detectWarnings', {
+    showRuby: state.settings.showRuby,
+    enabled: null,
+    chapterMark: state.settings.chapterMark,
+    episodeMark: state.settings.episodeMark,
+  });
 }
 
 /* ---------------- File open ---------------- */
@@ -2859,14 +3299,27 @@ function buildRulers(pageEl, cell) {
 }
 
 function markHeadings(pageEl, page) {
-  // 見出し行（#/##）の列に色クラスを付与（組版は変えない）。#=章, ##=話 で色を分ける。
+  // 見出し行（LF行）: 行頭〜マーカー前が半角/全角スペースのみなら色クラス。
+  // 改行で本文に戻る。
+  const marks = resolveHeadingMarks(state.settings);
   const cols = pageEl.querySelectorAll('.col');
   page.columns.forEach((c, i) => {
     if (!cols[i]) return;
-    const head = state.text.slice(c.start, c.start + 3);
-    if (/^##(?:\s|#|$)/.test(head)) cols[i].classList.add('heading-2');
-    else if (/^#(?:\s|$)/.test(head)) cols[i].classList.add('heading-1');
+    const line = lineTextAt(state.text, c.start);
+    const lv = headingLevel(line, marks);
+    if (lv === 2) cols[i].classList.add('heading-2');
+    else if (lv === 1) cols[i].classList.add('heading-1');
   });
+}
+
+/** offset を含む LF 行の本文（改行を含まない） */
+function lineTextAt(text, offset) {
+  const o = Math.max(0, Math.min(offset, text.length));
+  const start = o === 0 ? 0 : text.lastIndexOf('\n', o - 1) + 1;
+  let end = text.indexOf('\n', o);
+  if (end < 0) end = text.length;
+  // 列先頭が改行直後で o が次行のときも start は正しい。列が改行を含む場合は start 側の行を見る
+  return text.slice(start, end);
 }
 
 // 1文字ぶんの実寸をプローブ測定し、指定の字数×行数が収まる最大字級を理論計算する。
@@ -2942,6 +3395,7 @@ let scrubbing = false;
 function buildThumbnails() {
   const box = $('thumbs');
   box.innerHTML = '';
+  if (!state.pages.length) return;
   state.pages.forEach((p, i) => {
     const t = document.createElement('div');
     t.className = 'thumb';
@@ -2950,8 +3404,8 @@ function buildThumbnails() {
     num.className = 'tnum';
     num.textContent = String(i + 1);
     t.appendChild(num);
-    const hd = firstHeadingIn(p);
-    if (hd) {
+    // 1ページ内の章・話タイトルはすべて並べる
+    for (const hd of headingsInPage(p)) {
       const h = document.createElement('span');
       h.className = hd.level === 2 ? 'thead h2' : 'thead';
       h.textContent = hd.text;
@@ -2963,13 +3417,17 @@ function buildThumbnails() {
   });
   updateThumbActive();
 }
-function firstHeadingIn(p) {
+
+/** ページ範囲内の見出しを出現順ですべて返す（タイトルは長すぎると切る） */
+function headingsInPage(p) {
+  const marks = resolveHeadingMarks(state.settings);
   const seg = state.text.slice(p.range.start, p.range.end);
+  const out = [];
   for (const line of seg.split('\n')) {
-    const m = /^(#{1,2})\s*(.+)$/.exec(line);
-    if (m) return { level: m[1].length, text: m[2].slice(0, 24) };
+    const hd = headingTitle(line, marks, 24);
+    if (hd) out.push(hd);
   }
-  return null;
+  return out;
 }
 function updateThumbActive() {
   const box = $('thumbs');
@@ -3218,7 +3676,12 @@ function syncWarnListActive() {
 function doSearch() {
   const q = $('searchInput').value;
   if (!q) { state.matches = []; state.matchIndex = -1; $('searchCount').textContent = ''; renderCurrent(); return; }
-  send('search', { query: q, headingOnly: false });
+  send('search', {
+    query: q,
+    headingOnly: false,
+    chapterMark: state.settings.chapterMark,
+    episodeMark: state.settings.episodeMark,
+  });
 }
 function stepMatch(delta) {
   if (!state.matches.length) return;
@@ -3299,6 +3762,8 @@ function reflectSettingsToUI() {
   $('fontSelect').value = s.fontFamily;
   $('fontSize').value = s.fontSize;
   $('burasage').disabled = !s.kinsoku;
+  $('chapterMark').value = s.chapterMark != null ? s.chapterMark : '#';
+  $('episodeMark').value = s.episodeMark != null ? s.episodeMark : '##';
 }
 function applyAppearance() {
   const s = state.settings;
@@ -3394,6 +3859,24 @@ function bindUI() {
   $('warnNext').addEventListener('click', () => stepWarning(1));
 
   $('togglePanel').addEventListener('click', () => document.body.classList.toggle('panel-open'));
+
+  const onHeadingMarkChange = () => {
+    let chapter = String($('chapterMark').value ?? '');
+    let episode = String($('episodeMark').value ?? '');
+    // 空欄は既定に戻す
+    if (!chapter) chapter = '#';
+    if (!episode) episode = '##';
+    state.settings.chapterMark = chapter;
+    state.settings.episodeMark = episode;
+    $('chapterMark').value = chapter;
+    $('episodeMark').value = episode;
+    persist();
+    renderCurrent();
+    if (state.pages.length) buildThumbnails();
+    if (state.text) requestWarnings();
+  };
+  $('chapterMark').addEventListener('change', onHeadingMarkChange);
+  $('episodeMark').addEventListener('change', onHeadingMarkChange);
 }
 
 function clampInt(v, lo, hi, def) {

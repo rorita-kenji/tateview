@@ -2,6 +2,7 @@
 // 位置は正規化テキスト上の UTF-16 半開区間 [start,end)。
 // 半角ラン単位で集約、見出しプレフィックス・ルビ内は半角警告から除外、severity 付き。
 
+import { collectHeadingPrefixRanges, isHeadingLine, resolveHeadingMarks } from './heading.js';
 export const WARNING_LABELS = {
   'indent-missing': '字下げ漏れ',
   'dialog-indent': '会話文の不要な字下げ',
@@ -46,7 +47,7 @@ const DEFAULT_LIMIT = 1000;
 
 /**
  * @param {string} text
- * @param {{ showRuby?:boolean, enabled?:Set<string>, limit?:number }} [opt]
+ * @param {{ showRuby?:boolean, enabled?:Set<string>, limit?:number, chapterMark?:string, episodeMark?:string, headingMarks?:{chapter:string,episode:string} }} [opt]
  * @returns {{ items:{code,label,severity,range:{start,end}}[], total:number }}
  */
 export function detectWarnings(text, opt = {}) {
@@ -54,9 +55,10 @@ export function detectWarnings(text, opt = {}) {
   const enabled = opt.enabled || null;
   const limit = opt.limit || DEFAULT_LIMIT;
   const on = (code) => (enabled ? enabled.has(code) : true);
+  const headingMarks = resolveHeadingMarks(opt.headingMarks || opt);
 
   const rubyRanges = collectRubyRanges(text);
-  const headingPrefixRanges = collectHeadingPrefixRanges(text);
+  const headingPrefixRanges = collectHeadingPrefixRanges(text, headingMarks);
   const excluded = (pos) =>
     inAny(rubyRanges, pos) || inAny(headingPrefixRanges, pos);
 
@@ -86,7 +88,7 @@ export function detectWarnings(text, opt = {}) {
     const start = lineStart;
     lineStart += line.length + 1; // +1 は \n
 
-    const isHeading = /^#{1,2}(?:\s|$)/.test(line);
+    const isHeading = isHeadingLine(line, headingMarks);
 
     if (on('fullspace-only-line') && line.length > 0 && /^　+$/.test(line)) {
       add('fullspace-only-line', start, start + line.length);
@@ -324,17 +326,6 @@ function collectRubyRanges(text) {
   scan(text, /｜[^《\n]*《[^》\n]*》/g, (m) => ranges.push({ start: m.index, end: m.index + m[0].length }));
   scan(text, /[㐀-䶿一-鿿々]+《[^》\n]*》/g, (m) => ranges.push({ start: m.index, end: m.index + m[0].length }));
   return ranges.sort((a, b) => a.start - b.start);
-}
-
-function collectHeadingPrefixRanges(text) {
-  const ranges = [];
-  let lineStart = 0;
-  for (const line of text.split('\n')) {
-    const m = /^#{1,2}\s?/.exec(line);
-    if (m) ranges.push({ start: lineStart, end: lineStart + m[0].length });
-    lineStart += line.length + 1;
-  }
-  return ranges;
 }
 
 function inAny(ranges, pos) {

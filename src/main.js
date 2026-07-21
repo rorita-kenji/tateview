@@ -1,5 +1,6 @@
 // main.js — メインスレッドの統括
 import { pageIndexOfOffset } from './modules/paginator.js';
+import { headingLevel, headingTitle, resolveHeadingMarks } from './modules/heading.js';
 import { renderPage } from './ui/renderer.js';
 import {
   PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition,
@@ -146,7 +147,12 @@ function requestPaginate() {
   send('paginate', { config: currentConfig() });
 }
 function requestWarnings() {
-  send('detectWarnings', { showRuby: state.settings.showRuby, enabled: null });
+  send('detectWarnings', {
+    showRuby: state.settings.showRuby,
+    enabled: null,
+    chapterMark: state.settings.chapterMark,
+    episodeMark: state.settings.episodeMark,
+  });
 }
 
 /* ---------------- File open ---------------- */
@@ -270,14 +276,27 @@ function buildRulers(pageEl, cell) {
 }
 
 function markHeadings(pageEl, page) {
-  // 見出し行（#/##）の列に色クラスを付与（組版は変えない）。#=章, ##=話 で色を分ける。
+  // 見出し行（LF行）: 行頭〜マーカー前が半角/全角スペースのみなら色クラス。
+  // 改行で本文に戻る。
+  const marks = resolveHeadingMarks(state.settings);
   const cols = pageEl.querySelectorAll('.col');
   page.columns.forEach((c, i) => {
     if (!cols[i]) return;
-    const head = state.text.slice(c.start, c.start + 3);
-    if (/^##(?:\s|#|$)/.test(head)) cols[i].classList.add('heading-2');
-    else if (/^#(?:\s|$)/.test(head)) cols[i].classList.add('heading-1');
+    const line = lineTextAt(state.text, c.start);
+    const lv = headingLevel(line, marks);
+    if (lv === 2) cols[i].classList.add('heading-2');
+    else if (lv === 1) cols[i].classList.add('heading-1');
   });
+}
+
+/** offset を含む LF 行の本文（改行を含まない） */
+function lineTextAt(text, offset) {
+  const o = Math.max(0, Math.min(offset, text.length));
+  const start = o === 0 ? 0 : text.lastIndexOf('\n', o - 1) + 1;
+  let end = text.indexOf('\n', o);
+  if (end < 0) end = text.length;
+  // 列先頭が改行直後で o が次行のときも start は正しい。列が改行を含む場合は start 側の行を見る
+  return text.slice(start, end);
 }
 
 // 1文字ぶんの実寸をプローブ測定し、指定の字数×行数が収まる最大字級を理論計算する。
@@ -353,6 +372,7 @@ let scrubbing = false;
 function buildThumbnails() {
   const box = $('thumbs');
   box.innerHTML = '';
+  if (!state.pages.length) return;
   state.pages.forEach((p, i) => {
     const t = document.createElement('div');
     t.className = 'thumb';
@@ -361,8 +381,8 @@ function buildThumbnails() {
     num.className = 'tnum';
     num.textContent = String(i + 1);
     t.appendChild(num);
-    const hd = firstHeadingIn(p);
-    if (hd) {
+    // 1ページ内の章・話タイトルはすべて並べる
+    for (const hd of headingsInPage(p)) {
       const h = document.createElement('span');
       h.className = hd.level === 2 ? 'thead h2' : 'thead';
       h.textContent = hd.text;
@@ -374,13 +394,17 @@ function buildThumbnails() {
   });
   updateThumbActive();
 }
-function firstHeadingIn(p) {
+
+/** ページ範囲内の見出しを出現順ですべて返す（タイトルは長すぎると切る） */
+function headingsInPage(p) {
+  const marks = resolveHeadingMarks(state.settings);
   const seg = state.text.slice(p.range.start, p.range.end);
+  const out = [];
   for (const line of seg.split('\n')) {
-    const m = /^(#{1,2})\s*(.+)$/.exec(line);
-    if (m) return { level: m[1].length, text: m[2].slice(0, 24) };
+    const hd = headingTitle(line, marks, 24);
+    if (hd) out.push(hd);
   }
-  return null;
+  return out;
 }
 function updateThumbActive() {
   const box = $('thumbs');
@@ -629,7 +653,12 @@ function syncWarnListActive() {
 function doSearch() {
   const q = $('searchInput').value;
   if (!q) { state.matches = []; state.matchIndex = -1; $('searchCount').textContent = ''; renderCurrent(); return; }
-  send('search', { query: q, headingOnly: false });
+  send('search', {
+    query: q,
+    headingOnly: false,
+    chapterMark: state.settings.chapterMark,
+    episodeMark: state.settings.episodeMark,
+  });
 }
 function stepMatch(delta) {
   if (!state.matches.length) return;
@@ -710,6 +739,8 @@ function reflectSettingsToUI() {
   $('fontSelect').value = s.fontFamily;
   $('fontSize').value = s.fontSize;
   $('burasage').disabled = !s.kinsoku;
+  $('chapterMark').value = s.chapterMark != null ? s.chapterMark : '#';
+  $('episodeMark').value = s.episodeMark != null ? s.episodeMark : '##';
 }
 function applyAppearance() {
   const s = state.settings;
@@ -805,6 +836,24 @@ function bindUI() {
   $('warnNext').addEventListener('click', () => stepWarning(1));
 
   $('togglePanel').addEventListener('click', () => document.body.classList.toggle('panel-open'));
+
+  const onHeadingMarkChange = () => {
+    let chapter = String($('chapterMark').value ?? '');
+    let episode = String($('episodeMark').value ?? '');
+    // 空欄は既定に戻す
+    if (!chapter) chapter = '#';
+    if (!episode) episode = '##';
+    state.settings.chapterMark = chapter;
+    state.settings.episodeMark = episode;
+    $('chapterMark').value = chapter;
+    $('episodeMark').value = episode;
+    persist();
+    renderCurrent();
+    if (state.pages.length) buildThumbnails();
+    if (state.text) requestWarnings();
+  };
+  $('chapterMark').addEventListener('change', onHeadingMarkChange);
+  $('episodeMark').addEventListener('change', onHeadingMarkChange);
 }
 
 function clampInt(v, lo, hi, def) {

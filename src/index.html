@@ -49,6 +49,11 @@
 
   <main>
     <div id="sidebar">
+      <!-- 章/話記号: サムネ有無に関わらず常時表示（1行） -->
+      <div id="markBar" class="mark-bar" title="行頭（半角/全角スペースのみ可）の見出し記号">
+        <label class="mark-ch">章記号：<input id="chapterMark" type="text" value="#" maxlength="16" spellcheck="false" autocomplete="off" /></label>
+        <label class="mark-ep">話記号：<input id="episodeMark" type="text" value="##" maxlength="16" spellcheck="false" autocomplete="off" /></label>
+      </div>
       <div id="thumbs" title="ドラッグでページ移動"></div>
       <!-- 左メニュー: ページ移動 + 表示設定 -->
       <div id="controls">
@@ -81,7 +86,7 @@
           <select id="fontSize" title="字級"></select>
         </div>
         <div id="appCredit" class="app-credit">
-          <span>v0.9</span>
+          <span>v1.0</span>
           <span>by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
         </div>
       </div>
