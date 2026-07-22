@@ -161,10 +161,16 @@ function appendSpaceColored(parent, text, opt) {
 /** 見出し行の着色は本文と組版を変えないため、行頭マーカー（設定の章/話記号）の判定は main 側で行う（ここでは範囲ハイライトのみ）。 */
 
 function highlightHit(ranges, s, e) {
-  // 後勝ち（warn を search より後に push すれば warn 優先）
+  // 優先度: warn > search（同優先は後勝ち）
   let hit = null;
+  let best = -1;
   for (const r of ranges) {
-    if (s < r.end && e > r.start) hit = r;
+    if (!(s < r.end && e > r.start)) continue;
+    const rank = r.kind === 'warn' ? 2 : r.kind === 'search' ? 1 : 0;
+    if (rank >= best) {
+      best = rank;
+      hit = r;
+    }
   }
   return hit;
 }

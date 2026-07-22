@@ -2,6 +2,7 @@
 import { pageIndexOfOffset } from './modules/paginator.js';
 import { headingLevel, headingTitle, resolveHeadingMarks } from './modules/heading.js';
 import { WARNING_LABELS } from './modules/warnings.js';
+import { firstMatchIndexFrom, searchInRange } from './modules/search.js';
 import { renderPage } from './ui/renderer.js';
 import {
   PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition,
@@ -30,7 +31,7 @@ const state = {
   warnTotal: 0,
   warnIndex: -1,
   matches: [],
-  matchIndex: -1,
+  matchTotal: 0,
 };
 
 function init() {
@@ -142,10 +143,13 @@ function onWorkerMessage(e) {
     state.warnTotal = payload.total || payload.items.length;
     renderWarnings(state.warnTotal);
   } else if (type === 'searchResult') {
-    state.matches = payload.matches;
-    state.matchIndex = state.matches.length ? 0 : -1;
-    $('searchCount').textContent = payload.total ? `${payload.total}件` : '0件';
-    if (state.matchIndex >= 0) gotoOffset(state.matches[0].start);
+    // 表示中ページ先頭以降の最初のヒットへ。無ければページはそのまま（文書先頭へ飛ばない）
+    const from = searchStartOffset();
+    state.matches = payload.matches || [];
+    state.matchTotal = payload.total || state.matches.length;
+    updateSearchCount();
+    const i = firstMatchIndexFrom(state.matches, from, { wrap: false });
+    if (i >= 0) gotoOffset(state.matches[i].start);
     else renderCurrent();
   } else if (type === 'error') {
     setProgress('エラー: ' + payload.message);
@@ -242,8 +246,16 @@ function renderCurrent() {
   const page = state.pages[state.pageIndex];
   pageEl.classList.toggle('grid', !!state.settings.gridLines);
   const highlights = [];
-  if (state.matchIndex >= 0 && state.matches[state.matchIndex]) {
-    highlights.push({ ...state.matches[state.matchIndex], kind: 'search' });
+  // 検索欄の文字列があれば ENTER 前でも表示ページ内を即時ハイライト
+  // （全文の件数・前次移動は Enter / 🔍 後の state.matches）
+  if (page && state.text) {
+    const q = ($('searchInput') && $('searchInput').value) || '';
+    if (q) {
+      const live = searchInRange(state.text, q, page.range.start, page.range.end);
+      for (const m of live) {
+        highlights.push({ start: m.start, end: m.end, kind: 'search' });
+      }
+    }
   }
   if (state._warnHighlight) {
     highlights.push({ ...state._warnHighlight, kind: 'warn' });
@@ -714,9 +726,45 @@ function syncWarnListActive() {
 }
 
 /* ---------------- Search ---------------- */
+/** 検索開始オフセット: 常に表示中ページの先頭（ワード変更でも文書先頭へ戻さない） */
+function searchStartOffset() {
+  const page = state.pages[state.pageIndex];
+  if (page) return page.range.start;
+  return Math.max(0, state.pendingOffset || 0);
+}
+function updateSearchCount() {
+  const n = state.matches.length;
+  const t = state.matchTotal || n;
+  if (!n) {
+    $('searchCount').textContent = t ? `${t}件` : '0件';
+    return;
+  }
+  // カーソル番号は出さない（件数のみ）
+  $('searchCount').textContent = t === n ? `${n}件` : `${n}/${t}件`;
+}
+/** ヒットを含むページ番号（昇順・重複なし） */
+function pagesWithMatches() {
+  if (!state.matches.length || !state.pages.length) return [];
+  const out = [];
+  let last = -1;
+  for (const m of state.matches) {
+    const pi = pageIndexOfOffset(state.pages, m.start);
+    if (pi !== last) {
+      out.push(pi);
+      last = pi;
+    }
+  }
+  return out;
+}
 function doSearch() {
   const q = $('searchInput').value;
-  if (!q) { state.matches = []; state.matchIndex = -1; $('searchCount').textContent = ''; renderCurrent(); return; }
+  if (!q) {
+    state.matches = [];
+    state.matchTotal = 0;
+    $('searchCount').textContent = '';
+    renderCurrent();
+    return;
+  }
   send('search', {
     query: q,
     headingOnly: false,
@@ -724,10 +772,32 @@ function doSearch() {
     episodeMark: state.settings.episodeMark,
   });
 }
+/** 前/次: ヒットがあるページ単位で移動（同一ページ内の一致はまとめて1ステップ） */
 function stepMatch(delta) {
-  if (!state.matches.length) return;
-  state.matchIndex = (state.matchIndex + delta + state.matches.length) % state.matches.length;
-  gotoOffset(state.matches[state.matchIndex].start);
+  if (!state.matches.length || !state.pages.length) return;
+  const pages = pagesWithMatches();
+  if (!pages.length) return;
+  const cur = state.pageIndex;
+  let target = null;
+  if (delta > 0) {
+    for (let i = 0; i < pages.length; i++) {
+      if (pages[i] > cur) { target = pages[i]; break; }
+    }
+    if (target == null) target = pages[0]; // 末尾の次 → 先頭ページへ
+  } else {
+    for (let i = pages.length - 1; i >= 0; i--) {
+      if (pages[i] < cur) { target = pages[i]; break; }
+    }
+    if (target == null) target = pages[pages.length - 1]; // 先頭の前 → 末尾ページへ
+  }
+  // そのページ先頭の一致へ（ハイライトはページ内全件）
+  for (const m of state.matches) {
+    if (pageIndexOfOffset(state.pages, m.start) === target) {
+      gotoOffset(m.start);
+      return;
+    }
+  }
+  gotoPage(target);
 }
 function updateSearchIndicator() {
   $('searchCount').textContent = '';
@@ -904,6 +974,15 @@ function bindUI() {
   $('jumpInput').addEventListener('change', (e) => gotoPage((+e.target.value || 1) - 1));
 
   $('searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+  // 入力のたびに表示中ページへ該当ワードを色付け（全文検索は Enter）
+  $('searchInput').addEventListener('input', () => {
+    // クエリ変更で旧全文結果は無効（前/次が古い語に飛ばないように）
+    state.matches = [];
+    state.matchTotal = 0;
+    state.matchIndex = 0;
+    $('searchCount').textContent = '';
+    renderCurrent();
+  });
   $('searchBtn').addEventListener('click', doSearch);
   $('searchPrev').addEventListener('click', () => stepMatch(-1));
   $('searchNext').addEventListener('click', () => stepMatch(1));

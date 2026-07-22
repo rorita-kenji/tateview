@@ -268,8 +268,8 @@ mark { background: var(--mark); color: inherit; }
 #page mark.hl-search {
   background: var(--mark);
   color: inherit;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  border-radius: 2px;
+  /* 枠や padding は字送りがズレるので付けない（塗りだけ） */
+  border: none;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
@@ -471,7 +471,7 @@ footer .spacer { flex: 1; }
           <label><input id="fullwidthAlpha" type="checkbox" />全角英字</label>
           <label><input id="fullwidthDigit" type="checkbox" />全角数字</label>
         </div>
-        <div><button id="warnNext">次</button> <button id="warnPrev">前</button></div>
+        <div><button id="warnNext">▽次</button> <button id="warnPrev">前△</button></div>
       </div>
       <ul id="warnList"></ul>
     </aside>
@@ -1582,6 +1582,51 @@ function searchAll(text, query, opt = {}) {
   return { matches, total };
 }
 
+/**
+ * 開始オフセット以降の最初の一致インデックス。
+ * @param {{start:number,end:number}[]} matches  start 昇順
+ * @param {number} offset UTF-16
+ * @param {{ wrap?:boolean }} [opt] wrap=true のとき以降が無ければ先頭へ。既定はラップしない（-1）
+ * @returns {number}
+ */
+function firstMatchIndexFrom(matches, offset, opt = {}) {
+  if (!matches || !matches.length) return -1;
+  const o = Math.max(0, offset | 0);
+  for (let i = 0; i < matches.length; i++) {
+    if (matches[i].start >= o) return i;
+  }
+  return opt.wrap ? 0 : -1;
+}
+
+/**
+ * 半開区間 [rangeStart, rangeEnd) 内に完全に収まる一致のみ（表示ページの即時ハイライト用）。
+ * @param {string} text
+ * @param {string} query
+ * @param {number} rangeStart
+ * @param {number} rangeEnd
+ * @param {{ limit?:number }} [opt]
+ * @returns {{start:number,end:number}[]}
+ */
+function searchInRange(text, query, rangeStart, rangeEnd, opt = {}) {
+  const matches = [];
+  if (!query || !text) return matches;
+  const limit = opt.limit || 2000;
+  const rs = Math.max(0, rangeStart | 0);
+  const re = Math.min(text.length, Math.max(rs, rangeEnd | 0));
+  let from = rs;
+  while (from < re) {
+    const idx = text.indexOf(query, from);
+    if (idx === -1 || idx >= re) break;
+    const end = idx + query.length;
+    // ページ境界をまたぐ一致はハイライトしない（完全内包のみ）
+    if (end <= re && matches.length < limit) {
+      matches.push({ start: idx, end });
+    }
+    from = idx + Math.max(1, query.length);
+  }
+  return matches;
+}
+
 function collect(hay, needle, base, out, inc, limit) {
   let from = 0;
   let idx;
@@ -1592,7 +1637,7 @@ function collect(hay, needle, base, out, inc, limit) {
   }
 }
 
-return { searchAll };
+return { searchAll, firstMatchIndexFrom, searchInRange };
 })();
 
 __mods['position'] = (function(){ 'use strict';
@@ -2870,6 +2915,51 @@ function searchAll(text, query, opt = {}) {
   return { matches, total };
 }
 
+/**
+ * 開始オフセット以降の最初の一致インデックス。
+ * @param {{start:number,end:number}[]} matches  start 昇順
+ * @param {number} offset UTF-16
+ * @param {{ wrap?:boolean }} [opt] wrap=true のとき以降が無ければ先頭へ。既定はラップしない（-1）
+ * @returns {number}
+ */
+function firstMatchIndexFrom(matches, offset, opt = {}) {
+  if (!matches || !matches.length) return -1;
+  const o = Math.max(0, offset | 0);
+  for (let i = 0; i < matches.length; i++) {
+    if (matches[i].start >= o) return i;
+  }
+  return opt.wrap ? 0 : -1;
+}
+
+/**
+ * 半開区間 [rangeStart, rangeEnd) 内に完全に収まる一致のみ（表示ページの即時ハイライト用）。
+ * @param {string} text
+ * @param {string} query
+ * @param {number} rangeStart
+ * @param {number} rangeEnd
+ * @param {{ limit?:number }} [opt]
+ * @returns {{start:number,end:number}[]}
+ */
+function searchInRange(text, query, rangeStart, rangeEnd, opt = {}) {
+  const matches = [];
+  if (!query || !text) return matches;
+  const limit = opt.limit || 2000;
+  const rs = Math.max(0, rangeStart | 0);
+  const re = Math.min(text.length, Math.max(rs, rangeEnd | 0));
+  let from = rs;
+  while (from < re) {
+    const idx = text.indexOf(query, from);
+    if (idx === -1 || idx >= re) break;
+    const end = idx + query.length;
+    // ページ境界をまたぐ一致はハイライトしない（完全内包のみ）
+    if (end <= re && matches.length < limit) {
+      matches.push({ start: idx, end });
+    }
+    from = idx + Math.max(1, query.length);
+  }
+  return matches;
+}
+
 function collect(hay, needle, base, out, inc, limit) {
   let from = 0;
   let idx;
@@ -2880,7 +2970,7 @@ function collect(hay, needle, base, out, inc, limit) {
   }
 }
 
-return { searchAll };
+return { searchAll, firstMatchIndexFrom, searchInRange };
 })();
 
 __mods['position'] = (function(){ 'use strict';
@@ -3116,10 +3206,16 @@ function appendSpaceColored(parent, text, opt) {
 /** 見出し行の着色は本文と組版を変えないため、行頭マーカー（設定の章/話記号）の判定は main 側で行う（ここでは範囲ハイライトのみ）。 */
 
 function highlightHit(ranges, s, e) {
-  // 後勝ち（warn を search より後に push すれば warn 優先）
+  // 優先度: warn > search（同優先は後勝ち）
   let hit = null;
+  let best = -1;
   for (const r of ranges) {
-    if (s < r.end && e > r.start) hit = r;
+    if (!(s < r.end && e > r.start)) continue;
+    const rank = r.kind === 'warn' ? 2 : r.kind === 'search' ? 1 : 0;
+    if (rank >= best) {
+      best = rank;
+      hit = r;
+    }
   }
   return hit;
 }
@@ -3205,6 +3301,7 @@ return { loadSettings, saveSettings, savePosition, loadPosition, PRESETS, DEFAUL
 const {pageIndexOfOffset} = __mods['paginator'];
 const {headingLevel, headingTitle, resolveHeadingMarks} = __mods['heading'];
 const {WARNING_LABELS} = __mods['warnings'];
+const {firstMatchIndexFrom, searchInRange} = __mods['search'];
 const {renderPage} = __mods['renderer'];
 const {PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition,} = __mods['settings'];
 const $ = (id) => document.getElementById(id);
@@ -3230,7 +3327,7 @@ const state = {
   warnTotal: 0,
   warnIndex: -1,
   matches: [],
-  matchIndex: -1,
+  matchTotal: 0,
 };
 
 function init() {
@@ -3342,10 +3439,13 @@ function onWorkerMessage(e) {
     state.warnTotal = payload.total || payload.items.length;
     renderWarnings(state.warnTotal);
   } else if (type === 'searchResult') {
-    state.matches = payload.matches;
-    state.matchIndex = state.matches.length ? 0 : -1;
-    $('searchCount').textContent = payload.total ? `${payload.total}件` : '0件';
-    if (state.matchIndex >= 0) gotoOffset(state.matches[0].start);
+    // 表示中ページ先頭以降の最初のヒットへ。無ければページはそのまま（文書先頭へ飛ばない）
+    const from = searchStartOffset();
+    state.matches = payload.matches || [];
+    state.matchTotal = payload.total || state.matches.length;
+    updateSearchCount();
+    const i = firstMatchIndexFrom(state.matches, from, { wrap: false });
+    if (i >= 0) gotoOffset(state.matches[i].start);
     else renderCurrent();
   } else if (type === 'error') {
     setProgress('エラー: ' + payload.message);
@@ -3442,8 +3542,16 @@ function renderCurrent() {
   const page = state.pages[state.pageIndex];
   pageEl.classList.toggle('grid', !!state.settings.gridLines);
   const highlights = [];
-  if (state.matchIndex >= 0 && state.matches[state.matchIndex]) {
-    highlights.push({ ...state.matches[state.matchIndex], kind: 'search' });
+  // 検索欄の文字列があれば ENTER 前でも表示ページ内を即時ハイライト
+  // （全文の件数・前次移動は Enter / 🔍 後の state.matches）
+  if (page && state.text) {
+    const q = ($('searchInput') && $('searchInput').value) || '';
+    if (q) {
+      const live = searchInRange(state.text, q, page.range.start, page.range.end);
+      for (const m of live) {
+        highlights.push({ start: m.start, end: m.end, kind: 'search' });
+      }
+    }
   }
   if (state._warnHighlight) {
     highlights.push({ ...state._warnHighlight, kind: 'warn' });
@@ -3914,9 +4022,45 @@ function syncWarnListActive() {
 }
 
 /* ---------------- Search ---------------- */
+/** 検索開始オフセット: 常に表示中ページの先頭（ワード変更でも文書先頭へ戻さない） */
+function searchStartOffset() {
+  const page = state.pages[state.pageIndex];
+  if (page) return page.range.start;
+  return Math.max(0, state.pendingOffset || 0);
+}
+function updateSearchCount() {
+  const n = state.matches.length;
+  const t = state.matchTotal || n;
+  if (!n) {
+    $('searchCount').textContent = t ? `${t}件` : '0件';
+    return;
+  }
+  // カーソル番号は出さない（件数のみ）
+  $('searchCount').textContent = t === n ? `${n}件` : `${n}/${t}件`;
+}
+/** ヒットを含むページ番号（昇順・重複なし） */
+function pagesWithMatches() {
+  if (!state.matches.length || !state.pages.length) return [];
+  const out = [];
+  let last = -1;
+  for (const m of state.matches) {
+    const pi = pageIndexOfOffset(state.pages, m.start);
+    if (pi !== last) {
+      out.push(pi);
+      last = pi;
+    }
+  }
+  return out;
+}
 function doSearch() {
   const q = $('searchInput').value;
-  if (!q) { state.matches = []; state.matchIndex = -1; $('searchCount').textContent = ''; renderCurrent(); return; }
+  if (!q) {
+    state.matches = [];
+    state.matchTotal = 0;
+    $('searchCount').textContent = '';
+    renderCurrent();
+    return;
+  }
   send('search', {
     query: q,
     headingOnly: false,
@@ -3924,10 +4068,32 @@ function doSearch() {
     episodeMark: state.settings.episodeMark,
   });
 }
+/** 前/次: ヒットがあるページ単位で移動（同一ページ内の一致はまとめて1ステップ） */
 function stepMatch(delta) {
-  if (!state.matches.length) return;
-  state.matchIndex = (state.matchIndex + delta + state.matches.length) % state.matches.length;
-  gotoOffset(state.matches[state.matchIndex].start);
+  if (!state.matches.length || !state.pages.length) return;
+  const pages = pagesWithMatches();
+  if (!pages.length) return;
+  const cur = state.pageIndex;
+  let target = null;
+  if (delta > 0) {
+    for (let i = 0; i < pages.length; i++) {
+      if (pages[i] > cur) { target = pages[i]; break; }
+    }
+    if (target == null) target = pages[0]; // 末尾の次 → 先頭ページへ
+  } else {
+    for (let i = pages.length - 1; i >= 0; i--) {
+      if (pages[i] < cur) { target = pages[i]; break; }
+    }
+    if (target == null) target = pages[pages.length - 1]; // 先頭の前 → 末尾ページへ
+  }
+  // そのページ先頭の一致へ（ハイライトはページ内全件）
+  for (const m of state.matches) {
+    if (pageIndexOfOffset(state.pages, m.start) === target) {
+      gotoOffset(m.start);
+      return;
+    }
+  }
+  gotoPage(target);
 }
 function updateSearchIndicator() {
   $('searchCount').textContent = '';
@@ -4104,6 +4270,15 @@ function bindUI() {
   $('jumpInput').addEventListener('change', (e) => gotoPage((+e.target.value || 1) - 1));
 
   $('searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+  // 入力のたびに表示中ページへ該当ワードを色付け（全文検索は Enter）
+  $('searchInput').addEventListener('input', () => {
+    // クエリ変更で旧全文結果は無効（前/次が古い語に飛ばないように）
+    state.matches = [];
+    state.matchTotal = 0;
+    state.matchIndex = 0;
+    $('searchCount').textContent = '';
+    renderCurrent();
+  });
   $('searchBtn').addEventListener('click', doSearch);
   $('searchPrev').addEventListener('click', () => stepMatch(-1));
   $('searchNext').addEventListener('click', () => stepMatch(1));

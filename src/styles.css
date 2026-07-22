@@ -252,8 +252,8 @@ mark { background: var(--mark); color: inherit; }
 #page mark.hl-search {
   background: var(--mark);
   color: inherit;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  border-radius: 2px;
+  /* 枠や padding は字送りがズレるので付けない（塗りだけ） */
+  border: none;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }

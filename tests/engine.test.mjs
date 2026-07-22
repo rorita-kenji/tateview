@@ -6,7 +6,7 @@ import { detectAndDecode } from '../src/modules/encoding.js';
 import { tokenize, tokenizeToArray } from '../src/modules/tokenizer.js';
 import { paginate, pageIndexOfOffset } from '../src/modules/paginator.js';
 import { detectWarnings } from '../src/modules/warnings.js';
-import { searchAll } from '../src/modules/search.js';
+import { searchAll, firstMatchIndexFrom, searchInRange } from '../src/modules/search.js';
 import { makeRecord, restoreOffset } from '../src/modules/position.js';
 import { headingLevel, isHeadingLine, matchHeadingPrefix, headingTitle } from '../src/modules/heading.js';
 
@@ -497,6 +497,31 @@ test('search: 全文・見出し', () => {
   const custom = '【章】タイトル\n本文に章';
   assert.equal(searchAll(custom, '章', { headingOnly: true, chapterMark: '【章】', episodeMark: '【話】' }).total, 1);
   assert.equal(searchAll(custom, '章', { headingOnly: true }).total, 0);
+});
+test('search: firstMatchIndexFrom は offset 以降（既定はラップしない）', () => {
+  const text = 'あ章い章う章え';
+  const { matches } = searchAll(text, '章');
+  assert.equal(matches.length, 3);
+  assert.equal(firstMatchIndexFrom(matches, 0), 0);
+  assert.equal(firstMatchIndexFrom(matches, matches[1].start), 1);
+  assert.equal(firstMatchIndexFrom(matches, matches[1].start + 1), 2);
+  // 末尾より後 → 既定は -1（文書先頭へ飛ばない）
+  assert.equal(firstMatchIndexFrom(matches, text.length), -1);
+  assert.equal(firstMatchIndexFrom(matches, text.length, { wrap: true }), 0);
+  assert.equal(firstMatchIndexFrom([], 0), -1);
+});
+test('search: searchInRange はページ範囲内の完全一致のみ', () => {
+  // 0あ 1あ 2い 3あ 4う 5あ 6え — 「あい」は start=1 のみ
+  const text = 'ああいあうあえ';
+  const m = searchInRange(text, 'あい', 0, text.length);
+  assert.equal(m.length, 1);
+  assert.equal(m[0].start, 1);
+  assert.equal(m[0].end, 3);
+  // 範囲外の開始は拾わない
+  assert.equal(searchInRange(text, 'あい', 2, text.length).length, 0);
+  // 終端をまたぐ一致は除外
+  assert.equal(searchInRange(text, 'あい', 0, 2).length, 0);
+  assert.equal(searchInRange(text, '', 0, text.length).length, 0);
 });
 
 /* ---------------- position ---------------- */
