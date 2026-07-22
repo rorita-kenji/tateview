@@ -2,8 +2,17 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>縦view</title>
+  <!-- iPad/iPhone: ホーム画面追加時に Safari のアドレスバー・タブを出さない -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="縦view" />
+  <meta name="theme-color" content="#f7f5ef" />
+  <meta name="application-name" content="縦view" />
+  <!-- display:standalone（iOS 16.4+ のホーム画面 Web App 向け）。start_url は追加時の URL が使われる -->
+  <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22%E7%B8%A6view%22%2C%22short_name%22%3A%22%E7%B8%A6view%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f7f5ef%22%2C%22theme_color%22%3A%22%23f7f5ef%22%7D" />
   <style>
 :root {
   --fs: 20px;
