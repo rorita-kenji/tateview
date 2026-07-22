@@ -1109,6 +1109,9 @@ const WARNING_LABELS = {
   'no-space-after-bang': '！？後のスペース不足',
   'odd-leader-dash': '三点リーダ／ダッシュが奇数',
   halfwidth: '半角文字',
+  'fullwidth-alpha': '全角アルファベット',
+  'fullwidth-digit': '全角数字',
+  emoji: '絵文字',
   'ruby-off': 'ルビ非表示箇所',
   tab: 'TAB文字',
   'trailing-space': '行末空白',
@@ -1131,6 +1134,9 @@ const SEVERITY = {
   'no-space-after-bang': 'warning',
   'odd-leader-dash': 'warning',
   halfwidth: 'info',
+  'fullwidth-alpha': 'info',
+  'fullwidth-digit': 'info',
+  emoji: 'info',
   'ruby-off': 'info',
   tab: 'warning',
   'trailing-space': 'warning',
@@ -1291,6 +1297,25 @@ function detectWarnings(text, opt = {}) {
     // ただし「半角スペース」単独検出は空白のみランに限定（上の pureWs 分岐）
   });
 
+  // 全角アルファベット / 全角数字（info）。連続ラン単位。ルビ内・見出しプレフィックスは除外。
+  // Ａ-Ｚａ-ｚ = U+FF21–FF3A / U+FF41–FF5A、０-９ = U+FF10–FF19
+  scan(text, /[Ａ-Ｚａ-ｚ]+/g, (m) => {
+    if (!on('fullwidth-alpha') || excluded(m.index)) return;
+    add('fullwidth-alpha', m.index, m.index + m[0].length);
+  });
+  scan(text, /[０-９]+/g, (m) => {
+    if (!on('fullwidth-digit') || excluded(m.index)) return;
+    add('fullwidth-digit', m.index, m.index + m[0].length);
+  });
+
+  // 絵文字（info）。ZWJ結合・肌色・国旗・キーキャップを1シーケンスとし、連続はラン1件。
+  // ルビ内・見出しプレフィックスは除外。※や★など通常の記号は対象外（Extended_Pictographic 中心）。
+  if (on('emoji')) {
+    scanEmojiRuns(text, (start, end) => {
+      if (!excluded(start)) add('emoji', start, end);
+    });
+  }
+
   // 連続空行（3行以上）
   scan(text, /\n[ \t　]*\n[ \t　]*\n/g, (m) => on('consecutive-blank') && add('consecutive-blank', m.index, m.index + m[0].length));
 
@@ -1336,6 +1361,9 @@ function warnCodeOrder(code) {
     tab: 20,
     'halfwidth-space': 30,
     halfwidth: 40,
+    'fullwidth-alpha': 42,
+    'fullwidth-digit': 43,
+    emoji: 44,
     'trailing-space': 50,
     'period-before-bracket': 60,
     'no-space-after-bang': 70,
@@ -1431,6 +1459,39 @@ function scan(text, re, cb) {
     cb(m);
     if (m.index === re.lastIndex) re.lastIndex++; // 空マッチ対策
   }
+}
+
+/**
+ * 絵文字シーケンスを走査し、隣接する連続を1ランにまとめて cb(start, end)。
+ * - Extended_Pictographic + 任意 VS16 + 肌色 + タグ列 + ZWJ 連鎖
+ * - 国旗（地域指示子×2）
+ * - キーキャップ（数字/#/* + 任意 VS16 + U+20E3）
+ */
+function scanEmojiRuns(text, cb) {
+  // u フラグ必須。数字単体の \p{Emoji} は拾わない（Extended_Pictographic 中心）。
+  const re =
+    /(?:\p{Regional_Indicator}{2})|(?:[0-9#*]\uFE0F?\u20E3)|(?:\p{Extended_Pictographic}\uFE0F?(?:[\u{1F3FB}-\u{1F3FF}])?(?:[\u{E0020}-\u{E007E}]+\u{E007F})?(?:\u200D\p{Extended_Pictographic}\uFE0F?(?:[\u{1F3FB}-\u{1F3FF}])?)*)/gu;
+  let runStart = -1;
+  let runEnd = -1;
+  let m;
+  re.lastIndex = 0;
+  while ((m = re.exec(text)) !== null) {
+    const s = m.index;
+    const e = s + m[0].length;
+    if (runStart < 0) {
+      runStart = s;
+      runEnd = e;
+    } else if (s === runEnd) {
+      runEnd = e; // 隣接連続を同一ランに
+    } else {
+      cb(runStart, runEnd);
+      runStart = s;
+      runEnd = e;
+    }
+    // 空マッチ防止（通常は起きない）
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  if (runStart >= 0) cb(runStart, runEnd);
 }
 
 function collectRubyRanges(text) {
@@ -2336,6 +2397,9 @@ const WARNING_LABELS = {
   'no-space-after-bang': '！？後のスペース不足',
   'odd-leader-dash': '三点リーダ／ダッシュが奇数',
   halfwidth: '半角文字',
+  'fullwidth-alpha': '全角アルファベット',
+  'fullwidth-digit': '全角数字',
+  emoji: '絵文字',
   'ruby-off': 'ルビ非表示箇所',
   tab: 'TAB文字',
   'trailing-space': '行末空白',
@@ -2358,6 +2422,9 @@ const SEVERITY = {
   'no-space-after-bang': 'warning',
   'odd-leader-dash': 'warning',
   halfwidth: 'info',
+  'fullwidth-alpha': 'info',
+  'fullwidth-digit': 'info',
+  emoji: 'info',
   'ruby-off': 'info',
   tab: 'warning',
   'trailing-space': 'warning',
@@ -2518,6 +2585,25 @@ function detectWarnings(text, opt = {}) {
     // ただし「半角スペース」単独検出は空白のみランに限定（上の pureWs 分岐）
   });
 
+  // 全角アルファベット / 全角数字（info）。連続ラン単位。ルビ内・見出しプレフィックスは除外。
+  // Ａ-Ｚａ-ｚ = U+FF21–FF3A / U+FF41–FF5A、０-９ = U+FF10–FF19
+  scan(text, /[Ａ-Ｚａ-ｚ]+/g, (m) => {
+    if (!on('fullwidth-alpha') || excluded(m.index)) return;
+    add('fullwidth-alpha', m.index, m.index + m[0].length);
+  });
+  scan(text, /[０-９]+/g, (m) => {
+    if (!on('fullwidth-digit') || excluded(m.index)) return;
+    add('fullwidth-digit', m.index, m.index + m[0].length);
+  });
+
+  // 絵文字（info）。ZWJ結合・肌色・国旗・キーキャップを1シーケンスとし、連続はラン1件。
+  // ルビ内・見出しプレフィックスは除外。※や★など通常の記号は対象外（Extended_Pictographic 中心）。
+  if (on('emoji')) {
+    scanEmojiRuns(text, (start, end) => {
+      if (!excluded(start)) add('emoji', start, end);
+    });
+  }
+
   // 連続空行（3行以上）
   scan(text, /\n[ \t　]*\n[ \t　]*\n/g, (m) => on('consecutive-blank') && add('consecutive-blank', m.index, m.index + m[0].length));
 
@@ -2563,6 +2649,9 @@ function warnCodeOrder(code) {
     tab: 20,
     'halfwidth-space': 30,
     halfwidth: 40,
+    'fullwidth-alpha': 42,
+    'fullwidth-digit': 43,
+    emoji: 44,
     'trailing-space': 50,
     'period-before-bracket': 60,
     'no-space-after-bang': 70,
@@ -2658,6 +2747,39 @@ function scan(text, re, cb) {
     cb(m);
     if (m.index === re.lastIndex) re.lastIndex++; // 空マッチ対策
   }
+}
+
+/**
+ * 絵文字シーケンスを走査し、隣接する連続を1ランにまとめて cb(start, end)。
+ * - Extended_Pictographic + 任意 VS16 + 肌色 + タグ列 + ZWJ 連鎖
+ * - 国旗（地域指示子×2）
+ * - キーキャップ（数字/#/* + 任意 VS16 + U+20E3）
+ */
+function scanEmojiRuns(text, cb) {
+  // u フラグ必須。数字単体の \p{Emoji} は拾わない（Extended_Pictographic 中心）。
+  const re =
+    /(?:\p{Regional_Indicator}{2})|(?:[0-9#*]\uFE0F?\u20E3)|(?:\p{Extended_Pictographic}\uFE0F?(?:[\u{1F3FB}-\u{1F3FF}])?(?:[\u{E0020}-\u{E007E}]+\u{E007F})?(?:\u200D\p{Extended_Pictographic}\uFE0F?(?:[\u{1F3FB}-\u{1F3FF}])?)*)/gu;
+  let runStart = -1;
+  let runEnd = -1;
+  let m;
+  re.lastIndex = 0;
+  while ((m = re.exec(text)) !== null) {
+    const s = m.index;
+    const e = s + m[0].length;
+    if (runStart < 0) {
+      runStart = s;
+      runEnd = e;
+    } else if (s === runEnd) {
+      runEnd = e; // 隣接連続を同一ランに
+    } else {
+      cb(runStart, runEnd);
+      runStart = s;
+      runEnd = e;
+    }
+    // 空マッチ防止（通常は起きない）
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  if (runStart >= 0) cb(runStart, runEnd);
 }
 
 function collectRubyRanges(text) {

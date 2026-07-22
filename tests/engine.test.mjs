@@ -418,6 +418,70 @@ test('warnings: 半角カナは halfwidth に統合', () => {
   assert.ok(!codes('｜A《エー》').includes('halfwidth'));
 });
 
+test('warnings: 全角アルファベット・全角数字は info', () => {
+  const alpha = detectWarnings('　ＡＢＣです');
+  const aItems = alpha.items.filter((i) => i.code === 'fullwidth-alpha');
+  assert.equal(aItems.length, 1);
+  assert.equal(aItems[0].severity, 'info');
+  assert.equal(aItems[0].label, '全角アルファベット');
+  assert.deepEqual(aItems[0].range, { start: 1, end: 4 });
+
+  const digit = detectWarnings('　１２３円');
+  const dItems = digit.items.filter((i) => i.code === 'fullwidth-digit');
+  assert.equal(dItems.length, 1);
+  assert.equal(dItems[0].severity, 'info');
+  assert.equal(dItems[0].label, '全角数字');
+  assert.deepEqual(dItems[0].range, { start: 1, end: 4 });
+
+  // 半角英数は fullwidth 系に出さない
+  assert.ok(!codes('　ABC123').includes('fullwidth-alpha'));
+  assert.ok(!codes('　ABC123').includes('fullwidth-digit'));
+
+  // 連続はラン1件
+  const run = detectWarnings('　ＡａＺｚ０９').items;
+  assert.equal(run.filter((i) => i.code === 'fullwidth-alpha').length, 1);
+  assert.equal(run.filter((i) => i.code === 'fullwidth-digit').length, 1);
+
+  // ルビ内除外
+  assert.ok(!codes('｜Ａ《エー》').includes('fullwidth-alpha'));
+  assert.ok(!codes('漢字《０１》').includes('fullwidth-digit'));
+});
+
+test('warnings: 絵文字は info', () => {
+  const smile = '😀';
+  const r = detectWarnings(`　あ${smile}い`);
+  const items = r.items.filter((i) => i.code === 'emoji');
+  assert.equal(items.length, 1);
+  assert.equal(items[0].severity, 'info');
+  assert.equal(items[0].label, '絵文字');
+  assert.deepEqual(items[0].range, { start: 2, end: 2 + smile.length });
+
+  // 隣接連続は1ラン
+  const double = `${smile}${smile}`;
+  const run = detectWarnings(`　${double}`).items.filter((i) => i.code === 'emoji');
+  assert.equal(run.length, 1);
+  assert.deepEqual(run[0].range, { start: 1, end: 1 + double.length });
+
+  // ZWJ 家族など1シーケンス
+  const family = '👨\u200D👩\u200D👧';
+  const zwj = detectWarnings(`　${family}`).items.filter((i) => i.code === 'emoji');
+  assert.equal(zwj.length, 1);
+  assert.deepEqual(zwj[0].range, { start: 1, end: 1 + family.length });
+
+  // 国旗
+  const flag = '🇯🇵';
+  assert.equal(
+    detectWarnings(`　${flag}`).items.filter((i) => i.code === 'emoji').length,
+    1
+  );
+
+  // 通常の日本語・※★は絵文字にしない
+  assert.ok(!codes('　あいう※★').includes('emoji'));
+
+  // ルビ内除外
+  assert.ok(!codes(`漢字《${smile}》`).includes('emoji'));
+});
+
 /* ---------------- search ---------------- */
 test('search: 全文・見出し', () => {
   const text = '# 章タイトル\n本文に章がある。章は続く。';
