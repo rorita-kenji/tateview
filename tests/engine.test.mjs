@@ -373,6 +373,51 @@ test('warnings: 上限と total', () => {
   assert.ok(r.total >= 2000);
 });
 
+test('warnings: 句読点の連続', () => {
+  // 検出される例
+  const dp = codes('あいう。、い');
+  assert.ok(dp.includes('double-punctuation'));
+  // 3文字連続も
+  assert.ok(codes('。。。。。').includes('double-punctuation'));
+  // 単独は対象外
+  assert.ok(!codes('あいう。い').includes('double-punctuation'));
+});
+
+test('warnings: 括弧の不一致（mixed-bracket）', () => {
+  const result = detectWarnings('「こんにちは」');
+  assert.ok(!result.items.some((i) => i.code === 'mixed-bracket'));
+
+  // 「で開いて」で閉じる → 一致
+  const ok = codes('「こんにちは」');
+  assert.ok(!ok.includes('mixed-bracket'));
+
+  // 「で開いて]で閉じる → mismatch
+  const mixed = detectWarnings('「こんにちは]').items.filter((i) => i.code === 'mixed-bracket');
+  assert.equal(mixed.length, 1);
+  assert.match(mixed[0].label, /括弧の不一致.*→\]/);
+
+  // (で開いて」で閉じる → mismatch
+  const mixed2 = detectWarnings('(こんにちは」').items.filter((i) => i.code === 'mixed-bracket');
+  assert.equal(mixed2.length, 1);
+});
+
+test('warnings: 半角カナは halfwidth に統合', () => {
+  // 半角カナは halfwidth として検出される
+  assert.ok(codes('あいうｱい').includes('halfwidth'));
+
+  // 半角カナのみでも halfwidth として拾う（字下げ漏れも出るが halfwidth は1件）
+  const r = detectWarnings('ｱｲｳ');
+  const hwItems = r.items.filter((i) => i.code === 'halfwidth');
+  assert.equal(hwItems.length, 1);
+  assert.deepEqual(hwItems[0].range, { start: 0, end: 3 });
+
+  // 通常の全角カナは halfwidth ではない
+  assert.ok(!codes('アイウエオ').includes('halfwidth'));
+
+  // ルビ内は除外される
+  assert.ok(!codes('｜A《エー》').includes('halfwidth'));
+});
+
 /* ---------------- search ---------------- */
 test('search: 全文・見出し', () => {
   const text = '# 章タイトル\n本文に章がある。章は続く。';

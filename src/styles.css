@@ -50,8 +50,13 @@ body {
 }
 #topbar .brand { font-weight: 700; font-size: 16px; color: var(--accent); letter-spacing: 0.03em; }
 #fileMeta {
-  font-size: 12px; flex: 0 1 auto; min-width: 60px; max-width: 24em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12px;
+  flex: 1 1 18em;
+  min-width: 12em;
+  max-width: min(48em, 55vw);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 #topbar #searchInput { width: 8em; }
 #topbar button { padding: 3px 8px; }

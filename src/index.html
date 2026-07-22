@@ -21,12 +21,14 @@
   </script>
 </head>
 <body>
-  <!-- 上部メニュー(1段): ロゴ / 開く / ファイル名 / 検索 / 校正 / 更新 / 体裁 / 字・行 -->
+  <!-- 上部メニュー(1段): ロゴ / 開く / ファイル情報 / 更新|自動更新 / 検索 / 体裁 / 字・行 / 校正 -->
   <div id="topbar">
     <span class="brand">縦view</span>
     <button id="openFsBtn">開く</button>
     <input id="fileInput" type="file" accept=".txt,text/plain" hidden />
-    <span id="fileMeta" class="hint">ファイル未読み込み</span>
+    <span id="fileMeta" class="hint" title="">ファイル未読み込み</span>
+    <button id="reloadBtn" title="自動更新できない環境向け。同じ原稿を再読込（位置は維持）">更新</button>
+    <span id="autoLabel" class="badge" hidden>自動更新</span>
 
     <span class="sep"></span>
     <input id="searchInput" type="text" placeholder="検索" />
@@ -36,8 +38,6 @@
     <span id="searchCount" class="hint"></span>
 
     <span class="sep"></span>
-    <button id="reloadBtn" title="手動で再読込">更新</button>
-    <span id="autoLabel" class="badge" hidden>自動更新</span>
     <select id="presetSelect" title="体裁"></select>
     <label>字<input id="cpc" type="number" min="1" max="60" /></label>
     <label>行<input id="cpp" type="number" min="1" max="60" /></label>

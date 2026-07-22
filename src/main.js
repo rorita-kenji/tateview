@@ -21,6 +21,10 @@ const state = {
   fileName: 'untitled.txt',
   fileHandle: null,
   fileLastModified: 0,
+  /** 再読込時は true。loaded で loadPosition せず pendingOffset を維持 */
+  keepOffsetOnLoad: false,
+  /** 「更新」から file ピッカーを開いた（開くとは別） */
+  expectReloadPick: false,
   warnings: [],
   warnTotal: 0,
   warnIndex: -1,
@@ -106,14 +110,23 @@ function onWorkerMessage(e) {
     state.text = payload.text;
     setProgress('');
     const encLabel = { 'utf-8': 'UTF-8', 'shift_jis': 'Shift_JIS', unknown: '不明' }[payload.encoding] || payload.encoding;
-    $('fileMeta').textContent = `${state.fileName} ・ ${encLabel} ・ 改行 ${payload.newline} ・ ${state.text.length}字`;
-    state.pendingOffset = loadPosition(state.fileName, state.text);
+    const meta = `${state.fileName} ・ ${encLabel} ・ 改行 ${payload.newline} ・ ${state.text.length}字`;
+    $('fileMeta').textContent = meta;
+    $('fileMeta').title = meta;
+    // 初回オープンのみ位置復元。自動／手動の「更新」再読込は keepOffsetOnLoad で現在位置を維持
+    if (state.keepOffsetOnLoad) {
+      state.keepOffsetOnLoad = false;
+      state.pendingOffset = Math.max(0, Math.min(state.pendingOffset, state.text.length));
+    } else {
+      state.pendingOffset = loadPosition(state.fileName, state.text);
+    }
     requestPaginate();
     requestWarnings();
     updateSearchIndicator();
   } else if (type === 'needEncoding') {
     setProgress('文字コードを判定できませんでした');
     $('fileMeta').textContent = `${state.fileName} ・ 文字コード判定不可`;
+    $('fileMeta').title = $('fileMeta').textContent;
   } else if (type === 'paginated') {
     state.pages = payload.pages;
     state.pageIndex = clampPage(pageIndexOfOffset(state.pages, state.pendingOffset));
@@ -155,16 +168,57 @@ function requestWarnings() {
   });
 }
 
-/* ---------------- File open ---------------- */
-async function openFile(file, handle) {
+/* ---------------- File open / reload ---------------- */
+/**
+ * @param {File} file
+ * @param {FileSystemFileHandle|null} handle
+ * @param {{ keepPosition?: boolean }} [opts] keepPosition=true は更新再読込（位置維持）
+ */
+async function openFile(file, handle, opts = {}) {
   state.fileName = file.name || 'untitled.txt';
   state.fileHandle = handle || null;
   state.fileLastModified = file.lastModified || 0;
+  state.keepOffsetOnLoad = !!opts.keepPosition;
+  if (opts.keepPosition) {
+    const page = state.pages[state.pageIndex];
+    if (page) state.pendingOffset = page.range.start;
+    // pages が空でも呼び出し側で pendingOffset 済みならそれを使う
+  }
   updateReloadLabel();
   const buf = await file.arrayBuffer();
   state.docId++;
   setProgress('読み込み中…');
   send('load', { bytes: buf });
+}
+
+/**
+ * 「更新」ボタン用。開く（別ファイル選択）ではない。
+ * File System Access あり → ハンドルから再読込。
+ * なし → ブラウザ制限でディスク再読ができないため、同じファイルの再選択を促す。
+ */
+async function reloadManuscript() {
+  if (state.fileHandle) {
+    try {
+      const file = await state.fileHandle.getFile();
+      const page = state.pages[state.pageIndex];
+      if (page) state.pendingOffset = page.range.start;
+      state.fileLastModified = file.lastModified || 0;
+      await openFile(file, state.fileHandle, { keepPosition: true });
+      showToast('更新された');
+    } catch {
+      showToast('再読込に失敗しました');
+    }
+    return;
+  }
+  // 未オープン
+  if (!state.text && state.fileName === 'untitled.txt') {
+    showToast('先に「開く」で原稿を選択してください');
+    return;
+  }
+  // 自動更新不可環境: 同じファイルを選び直してディスク上の最新を読む
+  state.expectReloadPick = true;
+  showToast('同じファイルを選び直してください', 2000);
+  $('fileInput').click();
 }
 
 /* ---------------- Rendering ---------------- */
@@ -433,7 +487,7 @@ function setProgress(msg) {
 }
 
 // File System Access のハンドルがあれば自動更新監視が有効 →「自動更新」表示のみ。
-// 不可なら「更新」ボタン（クリックで再読込）を表示。
+// 不可なら「更新」ボタン（手動再読込。開くではない）を表示。
 function updateReloadLabel() {
   const btn = $('reloadBtn');
   const badge = $('autoLabel');
@@ -696,12 +750,10 @@ function startFileWatch() {
     try {
       const file = await state.fileHandle.getFile();
       if (file.lastModified !== state.fileLastModified) {
-        const keepOffset = state.pages[state.pageIndex] ? state.pages[state.pageIndex].range.start : 0;
+        const keepOffset = state.pages[state.pageIndex] ? state.pages[state.pageIndex].range.start : state.pendingOffset;
         state.fileLastModified = file.lastModified;
-        const buf = await file.arrayBuffer();
-        state.docId++;
         state.pendingOffset = keepOffset;
-        send('load', { bytes: buf });
+        await openFile(file, state.fileHandle, { keepPosition: true });
         showToast('更新された');
       }
     } catch { /* 権限切れ等は無視 */ }
@@ -752,17 +804,23 @@ function persist() { saveSettings(state.settings); }
 function bindUI() {
   $('fileInput').addEventListener('change', (e) => {
     const f = e.target.files[0];
-    if (f) openFile(f, null);
+    const reloadPick = state.expectReloadPick;
+    state.expectReloadPick = false;
+    // キャンセルや空選択で change が来ないこともある。来たら input を空にして同じファイル再選択を可能に
+    e.target.value = '';
+    if (f) openFile(f, null, { keepPosition: reloadPick });
   });
   $('openFsBtn').addEventListener('click', async () => {
+    state.expectReloadPick = false; // 「開く」は初回扱い
     if (!window.showOpenFilePicker) { $('fileInput').click(); return; }
     try {
       const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }] });
       const file = await handle.getFile();
-      openFile(file, handle);
+      openFile(file, handle, { keepPosition: false });
     } catch { /* キャンセル */ }
   });
-  $('reloadBtn').addEventListener('click', () => $('fileInput').click());
+  // 「更新」＝自動更新できないときの手動再読込（ファイルオープンUIの代替ではない）
+  $('reloadBtn').addEventListener('click', () => { reloadManuscript(); });
 
   $('presetSelect').addEventListener('change', (e) => {
     const v = e.target.value;

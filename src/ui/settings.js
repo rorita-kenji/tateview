@@ -5,11 +5,11 @@ const SETTINGS_KEY = 'tategaki-settings';
 const POS_PREFIX = 'tategaki-position:';
 
 export const PRESETS = [
-  { name: '20字 × 20行（400字）', charsPerColumn: 20, columnsPerPage: 20 },
-  { name: '40字 × 16行（640字）', charsPerColumn: 40, columnsPerPage: 16 },
-  { name: '40字 × 32行（1280字）', charsPerColumn: 40, columnsPerPage: 32 },
-  { name: '40字 × 34行（1360字）', charsPerColumn: 40, columnsPerPage: 34 },
-  { name: '42字 × 34行（1428字）', charsPerColumn: 42, columnsPerPage: 34 },
+  { name: '20字 × 20行', charsPerColumn: 20, columnsPerPage: 20 },
+  { name: '40字 × 16行', charsPerColumn: 40, columnsPerPage: 16 },
+  { name: '40字 × 32行', charsPerColumn: 40, columnsPerPage: 32 },
+  { name: '40字 × 34行', charsPerColumn: 40, columnsPerPage: 34 },
+  { name: '42字 × 34行', charsPerColumn: 42, columnsPerPage: 34 },
 ];
 
 export const DEFAULT_SETTINGS = {

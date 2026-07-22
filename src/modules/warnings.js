@@ -21,6 +21,8 @@ export const WARNING_LABELS = {
   'unmatched-close-bracket': '開きのない閉じ括弧',
   'repeated-chouon': '伸ばし棒の連続',
   'lonely-katakana-ni': '単独のカタカナ「ニ」（漢字「二」の誤りの可能性）',
+  'double-punctuation': '句読点の連続',
+  'mixed-bracket': '括弧の不一致',
 };
 
 const SEVERITY = {
@@ -41,6 +43,8 @@ const SEVERITY = {
   'unmatched-close-bracket': 'warning',
   'repeated-chouon': 'warning',
   'lonely-katakana-ni': 'warning',
+  'double-punctuation': 'warning',
+  'mixed-bracket': 'warning',
 };
 
 const DEFAULT_LIMIT = 1000;
@@ -135,6 +139,8 @@ export function detectWarnings(text, opt = {}) {
   scan(text, /―+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
   // 伸ばし棒「ー」(U+30FC) が2つ以上連続
   scan(text, /ー{2,}/g, (m) => on('repeated-chouon') && add('repeated-chouon', m.index, m.index + m[0].length));
+  // 句読点の連続（。、が2文字以上）
+  scan(text, /[。、]{2,}/g, (m) => on('double-punctuation') && add('double-punctuation', m.index, m.index + m[0].length));
   // 単独のカタカナ「ニ」（前後がカタカナ語を構成する文字でない）→ 漢字「二」誤変換が多い
   // カタカナ語の一部: ァ-ヶ・ー・゛゜・ヽヾ
   scan(text, /(?<![ァ-ヶー゛゜ヽヾ])ニ(?![ァ-ヶー゛゜ヽヾ])/g, (m) =>
@@ -147,8 +153,8 @@ export function detectWarnings(text, opt = {}) {
 
   // 半角ラン（見出しプレフィックス・ルビ内を除外）
   // 優先度: 行末空白 > 半角スペース（空白のみラン） > 半角文字（非空白を含むラン）
-  // 同じ箇所を3種で重ねない。
-  scan(text, /[\x20-\x7e｡-ﾟ]+/g, (m) => {
+  // 同じ箇所を3種で重ねない。半角カナ(U+FF61-FF9F)も halfwidth に含める。
+  scan(text, /[\x20-\x7e｡-ﾟ\uff61-\uff9f]+/g, (m) => {
     if (excluded(m.index)) return;
     const raw = m[0];
     const base = m.index;
@@ -178,7 +184,7 @@ export function detectWarnings(text, opt = {}) {
       while (end > base && inTrailing(end - 1)) end--;
       // 除いた結果が空白だけ／空なら halfwidth は出さない
       const body = text.slice(base, end);
-      if (body.length && /[\x21-\x7e｡-ﾟ]/.test(body)) {
+      if (body.length && /[\x21-\x7e｡-ﾟ\uff61-\uff9f]/.test(body)) {
         add('halfwidth', base, end);
       }
     }
@@ -236,8 +242,10 @@ function warnCodeOrder(code) {
     'no-space-after-bang': 70,
     'odd-leader-dash': 80,
     'repeated-chouon': 85,
+    'double-punctuation': 86,
     'lonely-katakana-ni': 87,
-    'dialog-indent': 90,
+    'mixed-bracket': 91,
+    'dialog-indent': 92,
     'indent-missing': 100,
     'fullspace-only-line': 110,
     'consecutive-blank': 120,
@@ -302,7 +310,12 @@ function detectBracketBalance(text, rubyRanges, emit) {
       if (top && top.close === ch) {
         stack.pop();
       } else {
+        // 開きのない閉じ括弧、または mismatch（mixed-bracket）
         emit('unmatched-close-bracket', i, i + 1, ch);
+        // stackトップが異なる閉じ括弧を期待している場合 → mixed-bracket
+        if (top && top.close !== closeToOpen[ch]) {
+          emit('mixed-bracket', top.start, top.start + top.open.length, `${top.open}→${ch}`);
+        }
       }
     }
     i += 1;

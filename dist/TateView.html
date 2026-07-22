@@ -57,8 +57,13 @@ body {
 }
 #topbar .brand { font-weight: 700; font-size: 16px; color: var(--accent); letter-spacing: 0.03em; }
 #fileMeta {
-  font-size: 12px; flex: 0 1 auto; min-width: 60px; max-width: 24em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12px;
+  flex: 1 1 18em;
+  min-width: 12em;
+  max-width: min(48em, 55vw);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 #topbar #searchInput { width: 8em; }
 #topbar button { padding: 3px 8px; }
@@ -368,12 +373,14 @@ footer .spacer { flex: 1; }
   </script>
 </head>
 <body>
-  <!-- 上部メニュー(1段): ロゴ / 開く / ファイル名 / 検索 / 校正 / 更新 / 体裁 / 字・行 -->
+  <!-- 上部メニュー(1段): ロゴ / 開く / ファイル情報 / 更新|自動更新 / 検索 / 体裁 / 字・行 / 校正 -->
   <div id="topbar">
     <span class="brand">縦view</span>
     <button id="openFsBtn">開く</button>
     <input id="fileInput" type="file" accept=".txt,text/plain" hidden />
-    <span id="fileMeta" class="hint">ファイル未読み込み</span>
+    <span id="fileMeta" class="hint" title="">ファイル未読み込み</span>
+    <button id="reloadBtn" title="自動更新できない環境向け。同じ原稿を再読込（位置は維持）">更新</button>
+    <span id="autoLabel" class="badge" hidden>自動更新</span>
 
     <span class="sep"></span>
     <input id="searchInput" type="text" placeholder="検索" />
@@ -383,8 +390,6 @@ footer .spacer { flex: 1; }
     <span id="searchCount" class="hint"></span>
 
     <span class="sep"></span>
-    <button id="reloadBtn" title="手動で再読込">更新</button>
-    <span id="autoLabel" class="badge" hidden>自動更新</span>
     <select id="presetSelect" title="体裁"></select>
     <label>字<input id="cpc" type="number" min="1" max="60" /></label>
     <label>行<input id="cpp" type="number" min="1" max="60" /></label>
@@ -1106,6 +1111,8 @@ const WARNING_LABELS = {
   'unmatched-close-bracket': '開きのない閉じ括弧',
   'repeated-chouon': '伸ばし棒の連続',
   'lonely-katakana-ni': '単独のカタカナ「ニ」（漢字「二」の誤りの可能性）',
+  'double-punctuation': '句読点の連続',
+  'mixed-bracket': '括弧の不一致',
 };
 
 const SEVERITY = {
@@ -1126,6 +1133,8 @@ const SEVERITY = {
   'unmatched-close-bracket': 'warning',
   'repeated-chouon': 'warning',
   'lonely-katakana-ni': 'warning',
+  'double-punctuation': 'warning',
+  'mixed-bracket': 'warning',
 };
 
 const DEFAULT_LIMIT = 1000;
@@ -1220,6 +1229,8 @@ function detectWarnings(text, opt = {}) {
   scan(text, /―+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
   // 伸ばし棒「ー」(U+30FC) が2つ以上連続
   scan(text, /ー{2,}/g, (m) => on('repeated-chouon') && add('repeated-chouon', m.index, m.index + m[0].length));
+  // 句読点の連続（。、が2文字以上）
+  scan(text, /[。、]{2,}/g, (m) => on('double-punctuation') && add('double-punctuation', m.index, m.index + m[0].length));
   // 単独のカタカナ「ニ」（前後がカタカナ語を構成する文字でない）→ 漢字「二」誤変換が多い
   // カタカナ語の一部: ァ-ヶ・ー・゛゜・ヽヾ
   scan(text, /(?<![ァ-ヶー゛゜ヽヾ])ニ(?![ァ-ヶー゛゜ヽヾ])/g, (m) =>
@@ -1232,8 +1243,8 @@ function detectWarnings(text, opt = {}) {
 
   // 半角ラン（見出しプレフィックス・ルビ内を除外）
   // 優先度: 行末空白 > 半角スペース（空白のみラン） > 半角文字（非空白を含むラン）
-  // 同じ箇所を3種で重ねない。
-  scan(text, /[\x20-\x7e｡-ﾟ]+/g, (m) => {
+  // 同じ箇所を3種で重ねない。半角カナ(U+FF61-FF9F)も halfwidth に含める。
+  scan(text, /[\x20-\x7e｡-ﾟ\uff61-\uff9f]+/g, (m) => {
     if (excluded(m.index)) return;
     const raw = m[0];
     const base = m.index;
@@ -1263,7 +1274,7 @@ function detectWarnings(text, opt = {}) {
       while (end > base && inTrailing(end - 1)) end--;
       // 除いた結果が空白だけ／空なら halfwidth は出さない
       const body = text.slice(base, end);
-      if (body.length && /[\x21-\x7e｡-ﾟ]/.test(body)) {
+      if (body.length && /[\x21-\x7e｡-ﾟ\uff61-\uff9f]/.test(body)) {
         add('halfwidth', base, end);
       }
     }
@@ -1321,8 +1332,10 @@ function warnCodeOrder(code) {
     'no-space-after-bang': 70,
     'odd-leader-dash': 80,
     'repeated-chouon': 85,
+    'double-punctuation': 86,
     'lonely-katakana-ni': 87,
-    'dialog-indent': 90,
+    'mixed-bracket': 91,
+    'dialog-indent': 92,
     'indent-missing': 100,
     'fullspace-only-line': 110,
     'consecutive-blank': 120,
@@ -1387,7 +1400,12 @@ function detectBracketBalance(text, rubyRanges, emit) {
       if (top && top.close === ch) {
         stack.pop();
       } else {
+        // 開きのない閉じ括弧、または mismatch（mixed-bracket）
         emit('unmatched-close-bracket', i, i + 1, ch);
+        // stackトップが異なる閉じ括弧を期待している場合 → mixed-bracket
+        if (top && top.close !== closeToOpen[ch]) {
+          emit('mixed-bracket', top.start, top.start + top.open.length, `${top.open}→${ch}`);
+        }
       }
     }
     i += 1;
@@ -2320,6 +2338,8 @@ const WARNING_LABELS = {
   'unmatched-close-bracket': '開きのない閉じ括弧',
   'repeated-chouon': '伸ばし棒の連続',
   'lonely-katakana-ni': '単独のカタカナ「ニ」（漢字「二」の誤りの可能性）',
+  'double-punctuation': '句読点の連続',
+  'mixed-bracket': '括弧の不一致',
 };
 
 const SEVERITY = {
@@ -2340,6 +2360,8 @@ const SEVERITY = {
   'unmatched-close-bracket': 'warning',
   'repeated-chouon': 'warning',
   'lonely-katakana-ni': 'warning',
+  'double-punctuation': 'warning',
+  'mixed-bracket': 'warning',
 };
 
 const DEFAULT_LIMIT = 1000;
@@ -2434,6 +2456,8 @@ function detectWarnings(text, opt = {}) {
   scan(text, /―+/g, (m) => on('odd-leader-dash') && [...m[0]].length % 2 === 1 && add('odd-leader-dash', m.index, m.index + m[0].length));
   // 伸ばし棒「ー」(U+30FC) が2つ以上連続
   scan(text, /ー{2,}/g, (m) => on('repeated-chouon') && add('repeated-chouon', m.index, m.index + m[0].length));
+  // 句読点の連続（。、が2文字以上）
+  scan(text, /[。、]{2,}/g, (m) => on('double-punctuation') && add('double-punctuation', m.index, m.index + m[0].length));
   // 単独のカタカナ「ニ」（前後がカタカナ語を構成する文字でない）→ 漢字「二」誤変換が多い
   // カタカナ語の一部: ァ-ヶ・ー・゛゜・ヽヾ
   scan(text, /(?<![ァ-ヶー゛゜ヽヾ])ニ(?![ァ-ヶー゛゜ヽヾ])/g, (m) =>
@@ -2446,8 +2470,8 @@ function detectWarnings(text, opt = {}) {
 
   // 半角ラン（見出しプレフィックス・ルビ内を除外）
   // 優先度: 行末空白 > 半角スペース（空白のみラン） > 半角文字（非空白を含むラン）
-  // 同じ箇所を3種で重ねない。
-  scan(text, /[\x20-\x7e｡-ﾟ]+/g, (m) => {
+  // 同じ箇所を3種で重ねない。半角カナ(U+FF61-FF9F)も halfwidth に含める。
+  scan(text, /[\x20-\x7e｡-ﾟ\uff61-\uff9f]+/g, (m) => {
     if (excluded(m.index)) return;
     const raw = m[0];
     const base = m.index;
@@ -2477,7 +2501,7 @@ function detectWarnings(text, opt = {}) {
       while (end > base && inTrailing(end - 1)) end--;
       // 除いた結果が空白だけ／空なら halfwidth は出さない
       const body = text.slice(base, end);
-      if (body.length && /[\x21-\x7e｡-ﾟ]/.test(body)) {
+      if (body.length && /[\x21-\x7e｡-ﾟ\uff61-\uff9f]/.test(body)) {
         add('halfwidth', base, end);
       }
     }
@@ -2535,8 +2559,10 @@ function warnCodeOrder(code) {
     'no-space-after-bang': 70,
     'odd-leader-dash': 80,
     'repeated-chouon': 85,
+    'double-punctuation': 86,
     'lonely-katakana-ni': 87,
-    'dialog-indent': 90,
+    'mixed-bracket': 91,
+    'dialog-indent': 92,
     'indent-missing': 100,
     'fullspace-only-line': 110,
     'consecutive-blank': 120,
@@ -2601,7 +2627,12 @@ function detectBracketBalance(text, rubyRanges, emit) {
       if (top && top.close === ch) {
         stack.pop();
       } else {
+        // 開きのない閉じ括弧、または mismatch（mixed-bracket）
         emit('unmatched-close-bracket', i, i + 1, ch);
+        // stackトップが異なる閉じ括弧を期待している場合 → mixed-bracket
+        if (top && top.close !== closeToOpen[ch]) {
+          emit('mixed-bracket', top.start, top.start + top.open.length, `${top.open}→${ch}`);
+        }
       }
     }
     i += 1;
@@ -2959,11 +2990,11 @@ const SETTINGS_KEY = 'tategaki-settings';
 const POS_PREFIX = 'tategaki-position:';
 
 const PRESETS = [
-  { name: '20字 × 20行（400字）', charsPerColumn: 20, columnsPerPage: 20 },
-  { name: '40字 × 16行（640字）', charsPerColumn: 40, columnsPerPage: 16 },
-  { name: '40字 × 32行（1280字）', charsPerColumn: 40, columnsPerPage: 32 },
-  { name: '40字 × 34行（1360字）', charsPerColumn: 40, columnsPerPage: 34 },
-  { name: '42字 × 34行（1428字）', charsPerColumn: 42, columnsPerPage: 34 },
+  { name: '20字 × 20行', charsPerColumn: 20, columnsPerPage: 20 },
+  { name: '40字 × 16行', charsPerColumn: 40, columnsPerPage: 16 },
+  { name: '40字 × 32行', charsPerColumn: 40, columnsPerPage: 32 },
+  { name: '40字 × 34行', charsPerColumn: 40, columnsPerPage: 34 },
+  { name: '42字 × 34行', charsPerColumn: 42, columnsPerPage: 34 },
 ];
 
 const DEFAULT_SETTINGS = {
@@ -3044,6 +3075,10 @@ const state = {
   fileName: 'untitled.txt',
   fileHandle: null,
   fileLastModified: 0,
+  /** 再読込時は true。loaded で loadPosition せず pendingOffset を維持 */
+  keepOffsetOnLoad: false,
+  /** 「更新」から file ピッカーを開いた（開くとは別） */
+  expectReloadPick: false,
   warnings: [],
   warnTotal: 0,
   warnIndex: -1,
@@ -3129,14 +3164,23 @@ function onWorkerMessage(e) {
     state.text = payload.text;
     setProgress('');
     const encLabel = { 'utf-8': 'UTF-8', 'shift_jis': 'Shift_JIS', unknown: '不明' }[payload.encoding] || payload.encoding;
-    $('fileMeta').textContent = `${state.fileName} ・ ${encLabel} ・ 改行 ${payload.newline} ・ ${state.text.length}字`;
-    state.pendingOffset = loadPosition(state.fileName, state.text);
+    const meta = `${state.fileName} ・ ${encLabel} ・ 改行 ${payload.newline} ・ ${state.text.length}字`;
+    $('fileMeta').textContent = meta;
+    $('fileMeta').title = meta;
+    // 初回オープンのみ位置復元。自動／手動の「更新」再読込は keepOffsetOnLoad で現在位置を維持
+    if (state.keepOffsetOnLoad) {
+      state.keepOffsetOnLoad = false;
+      state.pendingOffset = Math.max(0, Math.min(state.pendingOffset, state.text.length));
+    } else {
+      state.pendingOffset = loadPosition(state.fileName, state.text);
+    }
     requestPaginate();
     requestWarnings();
     updateSearchIndicator();
   } else if (type === 'needEncoding') {
     setProgress('文字コードを判定できませんでした');
     $('fileMeta').textContent = `${state.fileName} ・ 文字コード判定不可`;
+    $('fileMeta').title = $('fileMeta').textContent;
   } else if (type === 'paginated') {
     state.pages = payload.pages;
     state.pageIndex = clampPage(pageIndexOfOffset(state.pages, state.pendingOffset));
@@ -3178,16 +3222,57 @@ function requestWarnings() {
   });
 }
 
-/* ---------------- File open ---------------- */
-async function openFile(file, handle) {
+/* ---------------- File open / reload ---------------- */
+/**
+ * @param {File} file
+ * @param {FileSystemFileHandle|null} handle
+ * @param {{ keepPosition?: boolean }} [opts] keepPosition=true は更新再読込（位置維持）
+ */
+async function openFile(file, handle, opts = {}) {
   state.fileName = file.name || 'untitled.txt';
   state.fileHandle = handle || null;
   state.fileLastModified = file.lastModified || 0;
+  state.keepOffsetOnLoad = !!opts.keepPosition;
+  if (opts.keepPosition) {
+    const page = state.pages[state.pageIndex];
+    if (page) state.pendingOffset = page.range.start;
+    // pages が空でも呼び出し側で pendingOffset 済みならそれを使う
+  }
   updateReloadLabel();
   const buf = await file.arrayBuffer();
   state.docId++;
   setProgress('読み込み中…');
   send('load', { bytes: buf });
+}
+
+/**
+ * 「更新」ボタン用。開く（別ファイル選択）ではない。
+ * File System Access あり → ハンドルから再読込。
+ * なし → ブラウザ制限でディスク再読ができないため、同じファイルの再選択を促す。
+ */
+async function reloadManuscript() {
+  if (state.fileHandle) {
+    try {
+      const file = await state.fileHandle.getFile();
+      const page = state.pages[state.pageIndex];
+      if (page) state.pendingOffset = page.range.start;
+      state.fileLastModified = file.lastModified || 0;
+      await openFile(file, state.fileHandle, { keepPosition: true });
+      showToast('更新された');
+    } catch {
+      showToast('再読込に失敗しました');
+    }
+    return;
+  }
+  // 未オープン
+  if (!state.text && state.fileName === 'untitled.txt') {
+    showToast('先に「開く」で原稿を選択してください');
+    return;
+  }
+  // 自動更新不可環境: 同じファイルを選び直してディスク上の最新を読む
+  state.expectReloadPick = true;
+  showToast('同じファイルを選び直してください', 2000);
+  $('fileInput').click();
 }
 
 /* ---------------- Rendering ---------------- */
@@ -3456,7 +3541,7 @@ function setProgress(msg) {
 }
 
 // File System Access のハンドルがあれば自動更新監視が有効 →「自動更新」表示のみ。
-// 不可なら「更新」ボタン（クリックで再読込）を表示。
+// 不可なら「更新」ボタン（手動再読込。開くではない）を表示。
 function updateReloadLabel() {
   const btn = $('reloadBtn');
   const badge = $('autoLabel');
@@ -3719,12 +3804,10 @@ function startFileWatch() {
     try {
       const file = await state.fileHandle.getFile();
       if (file.lastModified !== state.fileLastModified) {
-        const keepOffset = state.pages[state.pageIndex] ? state.pages[state.pageIndex].range.start : 0;
+        const keepOffset = state.pages[state.pageIndex] ? state.pages[state.pageIndex].range.start : state.pendingOffset;
         state.fileLastModified = file.lastModified;
-        const buf = await file.arrayBuffer();
-        state.docId++;
         state.pendingOffset = keepOffset;
-        send('load', { bytes: buf });
+        await openFile(file, state.fileHandle, { keepPosition: true });
         showToast('更新された');
       }
     } catch { /* 権限切れ等は無視 */ }
@@ -3775,17 +3858,23 @@ function persist() { saveSettings(state.settings); }
 function bindUI() {
   $('fileInput').addEventListener('change', (e) => {
     const f = e.target.files[0];
-    if (f) openFile(f, null);
+    const reloadPick = state.expectReloadPick;
+    state.expectReloadPick = false;
+    // キャンセルや空選択で change が来ないこともある。来たら input を空にして同じファイル再選択を可能に
+    e.target.value = '';
+    if (f) openFile(f, null, { keepPosition: reloadPick });
   });
   $('openFsBtn').addEventListener('click', async () => {
+    state.expectReloadPick = false; // 「開く」は初回扱い
     if (!window.showOpenFilePicker) { $('fileInput').click(); return; }
     try {
       const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }] });
       const file = await handle.getFile();
-      openFile(file, handle);
+      openFile(file, handle, { keepPosition: false });
     } catch { /* キャンセル */ }
   });
-  $('reloadBtn').addEventListener('click', () => $('fileInput').click());
+  // 「更新」＝自動更新できないときの手動再読込（ファイルオープンUIの代替ではない）
+  $('reloadBtn').addEventListener('click', () => { reloadManuscript(); });
 
   $('presetSelect').addEventListener('change', (e) => {
     const v = e.target.value;
