@@ -42,8 +42,8 @@
     <span class="sep"></span>
     <input id="searchInput" type="text" placeholder="検索" />
     <button id="searchBtn" title="検索">🔍</button>
-    <button id="searchPrev" title="前の一致">前</button>
     <button id="searchNext" title="次の一致">次</button>
+    <button id="searchPrev" title="前の一致">前</button>
     <span id="searchCount" class="hint"></span>
 
     <span class="sep"></span>
@@ -106,7 +106,11 @@
     <aside>
       <div class="section">
         <h2>校正ワーニング <span id="warnTotal" class="hint"></span></h2>
-        <div><button id="warnPrev">前</button> <button id="warnNext">次</button></div>
+        <div class="warn-toggles" title="多用するときはオフにできる">
+          <label><input id="fullwidthAlpha" type="checkbox" />全角英字</label>
+          <label><input id="fullwidthDigit" type="checkbox" />全角数字</label>
+        </div>
+        <div><button id="warnNext">次</button> <button id="warnPrev">前</button></div>
       </div>
       <ul id="warnList"></ul>
     </aside>

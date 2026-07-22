@@ -1,6 +1,7 @@
 // main.js — メインスレッドの統括
 import { pageIndexOfOffset } from './modules/paginator.js';
 import { headingLevel, headingTitle, resolveHeadingMarks } from './modules/heading.js';
+import { WARNING_LABELS } from './modules/warnings.js';
 import { renderPage } from './ui/renderer.js';
 import {
   PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition,
@@ -160,11 +161,20 @@ function requestPaginate() {
   send('paginate', { config: currentConfig() });
 }
 function requestWarnings() {
+  const s = state.settings;
+  // Build enabled set from individual toggle settings.
+  // null → all on (legacy). Now we control per-code via settings.
+  const enabled = new Set();
+  for (const code of Object.keys(WARNING_LABELS)) {
+    if (code === 'fullwidth-alpha' && !s.fullwidthAlpha) continue;
+    if (code === 'fullwidth-digit' && !s.fullwidthDigit) continue;
+    enabled.add(code);
+  }
   send('detectWarnings', {
-    showRuby: state.settings.showRuby,
-    enabled: null,
-    chapterMark: state.settings.chapterMark,
-    episodeMark: state.settings.episodeMark,
+    showRuby: s.showRuby,
+    enabled: [...enabled],
+    chapterMark: s.chapterMark,
+    episodeMark: s.episodeMark,
   });
 }
 
@@ -786,6 +796,8 @@ function reflectSettingsToUI() {
   $('showRuby').checked = s.showRuby;
   $('halfColor').checked = s.halfColor;
   $('spaceColor').checked = s.spaceColor;
+  $('fullwidthAlpha').checked = s.fullwidthAlpha;
+  $('fullwidthDigit').checked = s.fullwidthDigit;
   $('gridLines').checked = s.gridLines;
   $('themeSelect').value = s.theme;
   $('fontSelect').value = s.fontFamily;
@@ -860,6 +872,12 @@ function bindUI() {
   });
   $('spaceColor').addEventListener('change', (e) => {
     state.settings.spaceColor = e.target.checked; persist(); renderCurrent();
+  });
+  $('fullwidthAlpha').addEventListener('change', (e) => {
+    state.settings.fullwidthAlpha = e.target.checked; persist(); if (state.text) requestWarnings();
+  });
+  $('fullwidthDigit').addEventListener('change', (e) => {
+    state.settings.fullwidthDigit = e.target.checked; persist(); if (state.text) requestWarnings();
   });
   $('gridLines').addEventListener('change', (e) => {
     state.settings.gridLines = e.target.checked; persist(); renderCurrent();

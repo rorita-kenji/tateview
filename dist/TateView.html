@@ -322,6 +322,15 @@ aside {
 body.panel-open aside { width: 140px; }
 aside .section { padding: 8px 6px; border-bottom: 1px solid var(--border); }
 aside h2 { font-size: 12px; margin: 0 0 6px; }
+aside .warn-toggles {
+  display: flex; flex-wrap: wrap; gap: 4px 8px;
+  margin: 0 0 6px; font-size: 11px; line-height: 1.3;
+}
+aside .warn-toggles label {
+  display: inline-flex; align-items: center; gap: 3px;
+  cursor: pointer; white-space: nowrap;
+}
+aside .warn-toggles input[type="checkbox"] { margin: 0; }
 #warnList { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
 .warn-item {
   padding: 4px 5px; font-size: 11px; border-bottom: 1px solid var(--border);
@@ -394,8 +403,8 @@ footer .spacer { flex: 1; }
     <span class="sep"></span>
     <input id="searchInput" type="text" placeholder="検索" />
     <button id="searchBtn" title="検索">🔍</button>
-    <button id="searchPrev" title="前の一致">前</button>
     <button id="searchNext" title="次の一致">次</button>
+    <button id="searchPrev" title="前の一致">前</button>
     <span id="searchCount" class="hint"></span>
 
     <span class="sep"></span>
@@ -458,7 +467,11 @@ footer .spacer { flex: 1; }
     <aside>
       <div class="section">
         <h2>校正ワーニング <span id="warnTotal" class="hint"></span></h2>
-        <div><button id="warnPrev">前</button> <button id="warnNext">次</button></div>
+        <div class="warn-toggles" title="多用するときはオフにできる">
+          <label><input id="fullwidthAlpha" type="checkbox" />全角英字</label>
+          <label><input id="fullwidthDigit" type="checkbox" />全角数字</label>
+        </div>
+        <div><button id="warnNext">次</button> <button id="warnPrev">前</button></div>
       </div>
       <ul id="warnList"></ul>
     </aside>
@@ -1109,7 +1122,7 @@ const WARNING_LABELS = {
   'no-space-after-bang': '！？後のスペース不足',
   'odd-leader-dash': '三点リーダ／ダッシュが奇数',
   halfwidth: '半角文字',
-  'fullwidth-alpha': '全角アルファベット',
+  'fullwidth-alpha': '全角英字',
   'fullwidth-digit': '全角数字',
   emoji: '絵文字',
   'ruby-off': 'ルビ非表示箇所',
@@ -1297,7 +1310,7 @@ function detectWarnings(text, opt = {}) {
     // ただし「半角スペース」単独検出は空白のみランに限定（上の pureWs 分岐）
   });
 
-  // 全角アルファベット / 全角数字（info）。連続ラン単位。ルビ内・見出しプレフィックスは除外。
+  // 全角英字 / 全角数字（info）。連続ラン単位。ルビ内・見出しプレフィックスは除外。
   // Ａ-Ｚａ-ｚ = U+FF21–FF3A / U+FF41–FF5A、０-９ = U+FF10–FF19
   scan(text, /[Ａ-Ｚａ-ｚ]+/g, (m) => {
     if (!on('fullwidth-alpha') || excluded(m.index)) return;
@@ -2397,7 +2410,7 @@ const WARNING_LABELS = {
   'no-space-after-bang': '！？後のスペース不足',
   'odd-leader-dash': '三点リーダ／ダッシュが奇数',
   halfwidth: '半角文字',
-  'fullwidth-alpha': '全角アルファベット',
+  'fullwidth-alpha': '全角英字',
   'fullwidth-digit': '全角数字',
   emoji: '絵文字',
   'ruby-off': 'ルビ非表示箇所',
@@ -2585,7 +2598,7 @@ function detectWarnings(text, opt = {}) {
     // ただし「半角スペース」単独検出は空白のみランに限定（上の pureWs 分岐）
   });
 
-  // 全角アルファベット / 全角数字（info）。連続ラン単位。ルビ内・見出しプレフィックスは除外。
+  // 全角英字 / 全角数字（info）。連続ラン単位。ルビ内・見出しプレフィックスは除外。
   // Ａ-Ｚａ-ｚ = U+FF21–FF3A / U+FF41–FF5A、０-９ = U+FF10–FF19
   scan(text, /[Ａ-Ｚａ-ｚ]+/g, (m) => {
     if (!on('fullwidth-alpha') || excluded(m.index)) return;
@@ -3142,6 +3155,8 @@ const DEFAULT_SETTINGS = {
   halfColor: true,
   spaceColor: false,
   gridLines: false,
+  fullwidthAlpha: true,
+  fullwidthDigit: true,
   /** 章見出しの行頭記号（既定 `#`） */
   chapterMark: '#',
   /** 話見出しの行頭記号（既定 `##`） */
@@ -3189,6 +3204,7 @@ return { loadSettings, saveSettings, savePosition, loadPosition, PRESETS, DEFAUL
 // main.js — メインスレッドの統括
 const {pageIndexOfOffset} = __mods['paginator'];
 const {headingLevel, headingTitle, resolveHeadingMarks} = __mods['heading'];
+const {WARNING_LABELS} = __mods['warnings'];
 const {renderPage} = __mods['renderer'];
 const {PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition,} = __mods['settings'];
 const $ = (id) => document.getElementById(id);
@@ -3345,11 +3361,20 @@ function requestPaginate() {
   send('paginate', { config: currentConfig() });
 }
 function requestWarnings() {
+  const s = state.settings;
+  // Build enabled set from individual toggle settings.
+  // null → all on (legacy). Now we control per-code via settings.
+  const enabled = new Set();
+  for (const code of Object.keys(WARNING_LABELS)) {
+    if (code === 'fullwidth-alpha' && !s.fullwidthAlpha) continue;
+    if (code === 'fullwidth-digit' && !s.fullwidthDigit) continue;
+    enabled.add(code);
+  }
   send('detectWarnings', {
-    showRuby: state.settings.showRuby,
-    enabled: null,
-    chapterMark: state.settings.chapterMark,
-    episodeMark: state.settings.episodeMark,
+    showRuby: s.showRuby,
+    enabled: [...enabled],
+    chapterMark: s.chapterMark,
+    episodeMark: s.episodeMark,
   });
 }
 
@@ -3971,6 +3996,8 @@ function reflectSettingsToUI() {
   $('showRuby').checked = s.showRuby;
   $('halfColor').checked = s.halfColor;
   $('spaceColor').checked = s.spaceColor;
+  $('fullwidthAlpha').checked = s.fullwidthAlpha;
+  $('fullwidthDigit').checked = s.fullwidthDigit;
   $('gridLines').checked = s.gridLines;
   $('themeSelect').value = s.theme;
   $('fontSelect').value = s.fontFamily;
@@ -4045,6 +4072,12 @@ function bindUI() {
   });
   $('spaceColor').addEventListener('change', (e) => {
     state.settings.spaceColor = e.target.checked; persist(); renderCurrent();
+  });
+  $('fullwidthAlpha').addEventListener('change', (e) => {
+    state.settings.fullwidthAlpha = e.target.checked; persist(); if (state.text) requestWarnings();
+  });
+  $('fullwidthDigit').addEventListener('change', (e) => {
+    state.settings.fullwidthDigit = e.target.checked; persist(); if (state.text) requestWarnings();
   });
   $('gridLines').addEventListener('change', (e) => {
     state.settings.gridLines = e.target.checked; persist(); renderCurrent();

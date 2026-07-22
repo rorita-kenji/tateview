@@ -26,6 +26,8 @@ export const DEFAULT_SETTINGS = {
   halfColor: true,
   spaceColor: false,
   gridLines: false,
+  fullwidthAlpha: true,
+  fullwidthDigit: true,
   /** 章見出しの行頭記号（既定 `#`） */
   chapterMark: '#',
   /** 話見出しの行頭記号（既定 `##`） */

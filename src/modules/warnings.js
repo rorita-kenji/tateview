@@ -10,7 +10,7 @@ export const WARNING_LABELS = {
   'no-space-after-bang': '！？後のスペース不足',
   'odd-leader-dash': '三点リーダ／ダッシュが奇数',
   halfwidth: '半角文字',
-  'fullwidth-alpha': '全角アルファベット',
+  'fullwidth-alpha': '全角英字',
   'fullwidth-digit': '全角数字',
   emoji: '絵文字',
   'ruby-off': 'ルビ非表示箇所',
@@ -198,7 +198,7 @@ export function detectWarnings(text, opt = {}) {
     // ただし「半角スペース」単独検出は空白のみランに限定（上の pureWs 分岐）
   });
 
-  // 全角アルファベット / 全角数字（info）。連続ラン単位。ルビ内・見出しプレフィックスは除外。
+  // 全角英字 / 全角数字（info）。連続ラン単位。ルビ内・見出しプレフィックスは除外。
   // Ａ-Ｚａ-ｚ = U+FF21–FF3A / U+FF41–FF5A、０-９ = U+FF10–FF19
   scan(text, /[Ａ-Ｚａ-ｚ]+/g, (m) => {
     if (!on('fullwidth-alpha') || excluded(m.index)) return;

@@ -418,12 +418,12 @@ test('warnings: 半角カナは halfwidth に統合', () => {
   assert.ok(!codes('｜A《エー》').includes('halfwidth'));
 });
 
-test('warnings: 全角アルファベット・全角数字は info', () => {
+test('warnings: 全角英字・全角数字は info', () => {
   const alpha = detectWarnings('　ＡＢＣです');
   const aItems = alpha.items.filter((i) => i.code === 'fullwidth-alpha');
   assert.equal(aItems.length, 1);
   assert.equal(aItems[0].severity, 'info');
-  assert.equal(aItems[0].label, '全角アルファベット');
+  assert.equal(aItems[0].label, '全角英字');
   assert.deepEqual(aItems[0].range, { start: 1, end: 4 });
 
   const digit = detectWarnings('　１２３円');
@@ -445,6 +445,12 @@ test('warnings: 全角アルファベット・全角数字は info', () => {
   // ルビ内除外
   assert.ok(!codes('｜Ａ《エー》').includes('fullwidth-alpha'));
   assert.ok(!codes('漢字《０１》').includes('fullwidth-digit'));
+
+  // enabled でオフにできる
+  const offA = detectWarnings('　ＡＢＣです', { enabled: new Set(['indent-missing']) });
+  assert.ok(!offA.items.some((i) => i.code === 'fullwidth-alpha'));
+  const offD = detectWarnings('　１２３円', { enabled: new Set(['indent-missing']) });
+  assert.ok(!offD.items.some((i) => i.code === 'fullwidth-digit'));
 });
 
 test('warnings: 絵文字は info', () => {

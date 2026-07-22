@@ -306,6 +306,15 @@ aside {
 body.panel-open aside { width: 140px; }
 aside .section { padding: 8px 6px; border-bottom: 1px solid var(--border); }
 aside h2 { font-size: 12px; margin: 0 0 6px; }
+aside .warn-toggles {
+  display: flex; flex-wrap: wrap; gap: 4px 8px;
+  margin: 0 0 6px; font-size: 11px; line-height: 1.3;
+}
+aside .warn-toggles label {
+  display: inline-flex; align-items: center; gap: 3px;
+  cursor: pointer; white-space: nowrap;
+}
+aside .warn-toggles input[type="checkbox"] { margin: 0; }
 #warnList { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
 .warn-item {
   padding: 4px 5px; font-size: 11px; border-bottom: 1px solid var(--border);
