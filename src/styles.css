@@ -299,6 +299,14 @@ mark { background: var(--mark); color: inherit; }
 }
 body.dragover #dropHint { display: flex; }
 
+/* 未読状態の原稿表示領域にガイドテキストを表示 */
+#pageWrap .empty-hint {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--fg); opacity: 0.45; pointer-events: none; user-select: none;
+  text-align: center; line-height: 1.6;
+}
+#pageWrap.empty .empty-hint { display: flex; }
+
 aside {
   width: 0; overflow: hidden; background: var(--panel); border-left: 1px solid var(--border);
   transition: width 0.15s; display: flex; flex-direction: column;

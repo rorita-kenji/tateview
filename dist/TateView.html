@@ -315,6 +315,14 @@ mark { background: var(--mark); color: inherit; }
 }
 body.dragover #dropHint { display: flex; }
 
+/* 未読状態の原稿表示領域にガイドテキストを表示 */
+#pageWrap .empty-hint {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--fg); opacity: 0.45; pointer-events: none; user-select: none;
+  text-align: center; line-height: 1.6;
+}
+#pageWrap.empty .empty-hint { display: flex; }
+
 aside {
   width: 0; overflow: hidden; background: var(--panel); border-left: 1px solid var(--border);
   transition: width 0.15s; display: flex; flex-direction: column;
@@ -456,13 +464,13 @@ footer .spacer { flex: 1; }
           <select id="fontSize" title="字級"></select>
         </div>
         <div id="appCredit" class="app-credit">
-          <span>v1.0</span>
+          <span>v1.01</span>
           <span>by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
         </div>
       </div>
     </div>
 
-    <div id="pageWrap"><div id="page"></div></div>
+    <div id="pageWrap"><div id="page"></div><span class="empty-hint">ファイルを<br>クリックまたはドロップ</span></div>
 
     <aside>
       <div class="section">
@@ -3339,11 +3347,20 @@ function init() {
   reflectSettingsToUI();
   populateFontSizes();
   installCopyHandler();
+  // 未読状態のガイド表示
+  $('pageWrap').classList.add('empty');
   window.addEventListener('resize', () => { populateFontSizes(); renderCurrent(); });
   window.addEventListener('keydown', onKey);
   window.addEventListener('mouseup', () => { scrubbing = false; });
   const wrap = $('pageWrap');
   wrap.addEventListener('wheel', onWheel, { passive: false });
+  // 未読状態のとき、原稿表示領域のクリックでファイル選択ダイアログを開く
+  wrap.addEventListener('click', (e) => {
+    if (!state.text && state.fileName === 'untitled.txt') {
+      e.preventDefault();
+      $('fileInput').click();
+    }
+  });
   installSwipe(wrap);
   installDragAndDrop();
   startFileWatch();
@@ -3407,7 +3424,9 @@ function onWorkerMessage(e) {
   if (type === 'loaded') {
     state.text = payload.text;
     setProgress('');
-    const encLabel = { 'utf-8': 'UTF-8', 'shift_jis': 'Shift_JIS', unknown: '不明' }[payload.encoding] || payload.encoding;
+    // 未読ガイドを消す
+    $('pageWrap').classList.remove('empty');
+    const encLabel = { 'utf-8': 'UTF-8', 'shift_jis': 'Shift_JIS', unknown: '不明' }[payload.encoding || ''] || payload.encoding;
     const meta = `${state.fileName} ・ ${encLabel} ・ 改行 ${payload.newline} ・ ${state.text.length}字`;
     $('fileMeta').textContent = meta;
     $('fileMeta').title = meta;

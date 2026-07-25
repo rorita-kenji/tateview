@@ -43,11 +43,20 @@ function init() {
   reflectSettingsToUI();
   populateFontSizes();
   installCopyHandler();
+  // 未読状態のガイド表示
+  $('pageWrap').classList.add('empty');
   window.addEventListener('resize', () => { populateFontSizes(); renderCurrent(); });
   window.addEventListener('keydown', onKey);
   window.addEventListener('mouseup', () => { scrubbing = false; });
   const wrap = $('pageWrap');
   wrap.addEventListener('wheel', onWheel, { passive: false });
+  // 未読状態のとき、原稿表示領域のクリックでファイル選択ダイアログを開く
+  wrap.addEventListener('click', (e) => {
+    if (!state.text && state.fileName === 'untitled.txt') {
+      e.preventDefault();
+      $('fileInput').click();
+    }
+  });
   installSwipe(wrap);
   installDragAndDrop();
   startFileWatch();
@@ -111,7 +120,9 @@ function onWorkerMessage(e) {
   if (type === 'loaded') {
     state.text = payload.text;
     setProgress('');
-    const encLabel = { 'utf-8': 'UTF-8', 'shift_jis': 'Shift_JIS', unknown: '不明' }[payload.encoding] || payload.encoding;
+    // 未読ガイドを消す
+    $('pageWrap').classList.remove('empty');
+    const encLabel = { 'utf-8': 'UTF-8', 'shift_jis': 'Shift_JIS', unknown: '不明' }[payload.encoding || ''] || payload.encoding;
     const meta = `${state.fileName} ・ ${encLabel} ・ 改行 ${payload.newline} ・ ${state.text.length}字`;
     $('fileMeta').textContent = meta;
     $('fileMeta').title = meta;
