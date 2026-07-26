@@ -45,9 +45,13 @@ function init() {
   installCopyHandler();
   // 未読状態のガイド表示
   $('pageWrap').classList.add('empty');
-  window.addEventListener('resize', () => { populateFontSizes(); renderCurrent(); });
+  window.addEventListener('resize', () => {
+    populateFontSizes();
+    renderCurrent();
+    if (state.pages.length) refreshThumbLayout();
+  });
   window.addEventListener('keydown', onKey);
-  window.addEventListener('mouseup', () => { scrubbing = false; });
+  bindThumbScrub();
   const wrap = $('pageWrap');
   wrap.addEventListener('wheel', onWheel, { passive: false });
   // 未読状態のとき、原稿表示領域のクリックでファイル選択ダイアログを開く
@@ -454,42 +458,157 @@ function populateFontSizes() {
   sel.value = String(cur);
 }
 
-/* ---------------- Thumbnails ---------------- */
+/* ---------------- Thumbnails（ミニマップ: 領域内に全体表示・Y撫でで移動） ---------------- */
 let scrubbing = false;
+
 function buildThumbnails() {
   const box = $('thumbs');
   box.innerHTML = '';
+  box.classList.remove('compact', 'ultra', 'scrubbing');
   if (!state.pages.length) return;
+
+  // ビューポート枠 + 「Nページ」ラベル（常時）
+  const vp = document.createElement('div');
+  vp.className = 'thumb-viewport';
+  vp.setAttribute('aria-hidden', 'true');
+  const vpLabel = document.createElement('span');
+  vpLabel.className = 'vp-label';
+  vp.appendChild(vpLabel);
+  box.appendChild(vp);
+
+  const cpc = Math.max(1, state.settings.charsPerColumn || 40);
   state.pages.forEach((p, i) => {
     const t = document.createElement('div');
     t.className = 'thumb';
     t.dataset.i = String(i);
+    const heads = headingsInPage(p);
+
     const num = document.createElement('span');
     num.className = 'tnum';
     num.textContent = String(i + 1);
     t.appendChild(num);
-    // 1ページ内の章・話タイトルはすべて並べる
-    for (const hd of headingsInPage(p)) {
+    // 章/話: 色バー幅 ≒ タイトル字数 / 1行字数。ラベルは高さがあるときだけ
+    for (const hd of heads) {
+      const mark = document.createElement('span');
+      mark.className = hd.level === 2 ? 'tmark h2' : 'tmark h1';
+      // 1行設定字数に対する実タイトル長（コードポイント）。1行分で 100%
+      const pct = Math.min(100, Math.max(12, (hd.charLen / cpc) * 100));
+      mark.style.width = `${pct}%`;
+      mark.title = hd.text;
+      t.appendChild(mark);
+
       const h = document.createElement('span');
       h.className = hd.level === 2 ? 'thead h2' : 'thead';
       h.textContent = hd.text;
       t.appendChild(h);
     }
-    t.addEventListener('mousedown', (e) => { e.preventDefault(); scrubbing = true; gotoPage(i); });
-    t.addEventListener('mouseenter', () => { if (scrubbing) gotoPage(i); });
     box.appendChild(t);
   });
+  refreshThumbLayout();
   updateThumbActive();
 }
 
-/** ページ範囲内の見出しを出現順ですべて返す（タイトルは長すぎると切る） */
+/** ページ数と領域高さから compact/ultra を切替（スクロール無しで全体が見える） */
+function refreshThumbLayout() {
+  const box = $('thumbs');
+  const n = state.pages.length;
+  if (!n) {
+    box.classList.remove('compact', 'ultra');
+    return;
+  }
+  const h = box.clientHeight || 0;
+  const per = h > 0 ? h / n : 0;
+  // おおよそ: 16px未満で番号隠し、6px未満で帯のみ
+  box.classList.toggle('compact', per > 0 && per < 18);
+  box.classList.toggle('ultra', per > 0 && per < 7);
+  updateThumbViewport();
+}
+
+function updateThumbViewport() {
+  const box = $('thumbs');
+  const vp = box.querySelector('.thumb-viewport');
+  const n = state.pages.length;
+  if (!vp || !n) return;
+  const h = box.clientHeight;
+  if (h <= 0) return;
+  // padding は CSS と揃える（compact/ultra で少し変わるが位置の誤差は許容）
+  const cs = getComputedStyle(box);
+  const padTop = parseFloat(cs.paddingTop) || 0;
+  const padBot = parseFloat(cs.paddingBottom) || 0;
+  const inner = Math.max(0, h - padTop - padBot);
+  const rowH = inner / n;
+  // ラベル（20px）が読めるよう最低高さを確保し、行中央に合わせる
+  const hh = Math.max(24, rowH);
+  let top = padTop + state.pageIndex * rowH + (rowH - hh) / 2;
+  // はみ出し防止
+  const maxTop = padTop + inner - hh;
+  top = Math.max(padTop, Math.min(maxTop, top));
+  vp.style.top = `${top}px`;
+  vp.style.height = `${hh}px`;
+  const lab = vp.querySelector('.vp-label');
+  if (lab) lab.textContent = `${state.pageIndex + 1}ページ`;
+}
+
+/** クライアントY → ページ index（領域高さに全ページを等分マップ） */
+function pageIndexFromClientY(clientY) {
+  const box = $('thumbs');
+  const n = state.pages.length;
+  if (!n) return 0;
+  const rect = box.getBoundingClientRect();
+  if (rect.height <= 0) return 0;
+  const p = (clientY - rect.top) / rect.height;
+  const i = Math.floor(p * n);
+  return clampPage(i);
+}
+
+function bindThumbScrub() {
+  const box = $('thumbs');
+  box.addEventListener('pointerdown', (e) => {
+    if (e.button != null && e.button !== 0) return;
+    if (!state.pages.length) return;
+    // マーク入力など他要素は対象外（thumbs 内に交互作用要素は置かない）
+    scrubbing = true;
+    box.classList.add('scrubbing');
+    try { box.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    gotoPage(pageIndexFromClientY(e.clientY));
+    e.preventDefault();
+  });
+  box.addEventListener('pointermove', (e) => {
+    if (!scrubbing) return;
+    gotoPage(pageIndexFromClientY(e.clientY));
+    e.preventDefault();
+  });
+  const endScrub = (e) => {
+    if (!scrubbing) return;
+    scrubbing = false;
+    box.classList.remove('scrubbing');
+    try {
+      if (e && e.pointerId != null) box.releasePointerCapture(e.pointerId);
+    } catch (_) { /* ignore */ }
+  };
+  box.addEventListener('pointerup', endScrub);
+  box.addEventListener('pointercancel', endScrub);
+  box.addEventListener('lostpointercapture', () => {
+    scrubbing = false;
+    box.classList.remove('scrubbing');
+  });
+}
+
+/**
+ * ページ範囲内の見出しを出現順ですべて返す。
+ * text は表示用（長いと切る）、charLen はバー幅用の実タイトル字数（コードポイント）。
+ * @returns {{ level: 1|2, text: string, charLen: number }[]}
+ */
 function headingsInPage(p) {
   const marks = resolveHeadingMarks(state.settings);
   const seg = state.text.slice(p.range.start, p.range.end);
   const out = [];
   for (const line of seg.split('\n')) {
-    const hd = headingTitle(line, marks, 24);
-    if (hd) out.push(hd);
+    const full = headingTitle(line, marks, 0); // 切らずに実長を取る
+    if (!full) continue;
+    const charLen = Math.max(1, [...full.text].length);
+    const text = full.text.length > 24 ? full.text.slice(0, 24) : full.text;
+    out.push({ level: full.level, text, charLen });
   }
   return out;
 }
@@ -497,8 +616,10 @@ function updateThumbActive() {
   const box = $('thumbs');
   const cur = box.querySelector('.thumb.active');
   if (cur) cur.classList.remove('active');
-  const el = box.children[state.pageIndex];
-  if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
+  // .thumb-viewport を除いた .thumb を対象
+  const el = box.querySelector(`.thumb[data-i="${state.pageIndex}"]`);
+  if (el) el.classList.add('active');
+  updateThumbViewport();
 }
 
 function updateStatus() {
