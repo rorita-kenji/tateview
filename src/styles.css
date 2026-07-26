@@ -210,6 +210,7 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 #controls .app-credit a:hover { opacity: 1; color: var(--accent); }
 .thumb {
+  position: relative;
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
@@ -232,6 +233,57 @@ main { flex: 1; display: flex; min-height: 0; }
   background: color-mix(in srgb, var(--accent) 16%, var(--bg));
   box-shadow: inset 0 0 0 1.5px var(--accent);
   z-index: 1;
+}
+/* 全文検索ヒットあり: 本文 hl-search より濃い黄（ミニマップは小さく視認性優先） */
+.thumb.has-search {
+  background: color-mix(in srgb, var(--mark) 72%, var(--bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mark) 85%, var(--border));
+}
+.thumb.active.has-search {
+  background: color-mix(in srgb, var(--mark) 62%, color-mix(in srgb, var(--accent) 12%, var(--bg)));
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* ページ内相対位置のヒット線（上=ページ先頭） */
+.thumb .tsearch {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  height: 3px;
+  margin: 0;
+  padding: 0;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--mark) 55%, #e6b800);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #c9a000 70%, transparent);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 2;
+  transform: translateY(-50%);
+}
+#thumbs.compact .thumb .tsearch {
+  height: 3px;
+  left: 0;
+  right: 0;
+}
+/* ultra: 行が細いので位置線は出さず帯の黄色塗りだけ */
+#thumbs.ultra .thumb .tsearch {
+  display: none;
+}
+#thumbs.ultra .thumb.has-search {
+  background: color-mix(in srgb, var(--mark) 82%, var(--bg));
+}
+:root[data-theme='dark'] .thumb.has-search {
+  background: color-mix(in srgb, #e6c84a 55%, var(--bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #e6c84a 70%, var(--border));
+}
+:root[data-theme='dark'] .thumb.active.has-search {
+  background: color-mix(in srgb, #e6c84a 48%, color-mix(in srgb, var(--accent) 14%, var(--bg)));
+}
+:root[data-theme='dark'] .thumb .tsearch {
+  background: #e6c84a;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #e6c84a 60%, transparent);
+}
+:root[data-theme='dark'] #thumbs.ultra .thumb.has-search {
+  background: color-mix(in srgb, #e6c84a 68%, var(--bg));
 }
 .thumb .tnum {
   color: var(--fg);
@@ -363,7 +415,7 @@ main { flex: 1; display: flex; min-height: 0; }
   color: #9a9a9a;
 }
 
-#pageWrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 22px; overflow: hidden; }
+#pageWrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 22px; overflow: hidden; outline: none; }
 #page {
   position: relative;
   display: flex; flex-direction: row-reverse; gap: 0.4em;

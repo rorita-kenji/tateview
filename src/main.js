@@ -163,6 +163,7 @@ function onWorkerMessage(e) {
     state.matches = payload.matches || [];
     state.matchTotal = payload.total || state.matches.length;
     updateSearchCount();
+    updateThumbSearchMarks();
     const i = firstMatchIndexFrom(state.matches, from, { wrap: false });
     if (i >= 0) gotoOffset(state.matches[i].start);
     else renderCurrent();
@@ -506,6 +507,7 @@ function buildThumbnails() {
   });
   refreshThumbLayout();
   updateThumbActive();
+  updateThumbSearchMarks();
 }
 
 /** ページ数と領域高さから compact/ultra を切替（スクロール無しで全体が見える） */
@@ -569,6 +571,10 @@ function bindThumbScrub() {
     // マーク入力など他要素は対象外（thumbs 内に交互作用要素は置かない）
     scrubbing = true;
     box.classList.add('scrubbing');
+    // 検索欄などにフォーカスが残ると Space/矢印がページ送りにならず
+    // 「キーボードを受け付けない」ように見える。入力フォーカスを外して本文へ移す。
+    blurTextEntryFocus();
+    focusPageForKeys();
     try { box.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     gotoPage(pageIndexFromClientY(e.clientY));
     e.preventDefault();
@@ -585,6 +591,8 @@ function bindThumbScrub() {
     try {
       if (e && e.pointerId != null) box.releasePointerCapture(e.pointerId);
     } catch (_) { /* ignore */ }
+    // キャプチャ解放後もキー操作先を本文に固定
+    focusPageForKeys();
   };
   box.addEventListener('pointerup', endScrub);
   box.addEventListener('pointercancel', endScrub);
@@ -592,6 +600,28 @@ function bindThumbScrub() {
     scrubbing = false;
     box.classList.remove('scrubbing');
   });
+}
+
+/** 検索・数値・見出し記号など「文字入力」フォーカスを外す */
+function blurTextEntryFocus() {
+  const ae = document.activeElement;
+  if (!ae || ae === document.body || ae === document.documentElement) return;
+  const tag = ae.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || ae.isContentEditable) {
+    try { ae.blur(); } catch (_) { /* ignore */ }
+  }
+}
+
+/** ページキー（Space/矢印）を受け付けるよう本文領域へフォーカス */
+function focusPageForKeys() {
+  const wrap = $('pageWrap');
+  if (!wrap) return;
+  if (wrap.tabIndex < 0 && !wrap.hasAttribute('tabindex')) wrap.tabIndex = -1;
+  try {
+    wrap.focus({ preventScroll: true });
+  } catch (_) {
+    try { wrap.focus(); } catch (__) { /* ignore */ }
+  }
 }
 
 /**
@@ -620,6 +650,51 @@ function updateThumbActive() {
   const el = box.querySelector(`.thumb[data-i="${state.pageIndex}"]`);
   if (el) el.classList.add('active');
   updateThumbViewport();
+}
+
+/**
+ * 全文検索ヒットをミニマップ上に黄色で示す。
+ * ページ帯を薄く塗り、ページ内相対位置に細いマークを置く（本文の hl-search と同系色）。
+ * state.matches が空ならクリア（入力中のライブハイライトのみのときは出さない）。
+ */
+function updateThumbSearchMarks() {
+  const box = $('thumbs');
+  if (!box) return;
+  for (const el of box.querySelectorAll('.thumb')) {
+    el.classList.remove('has-search');
+    el.querySelectorAll('.tsearch').forEach((n) => n.remove());
+  }
+  if (!state.matches.length || !state.pages.length) return;
+
+  /** 1ページあたりの位置マーク上限（密集時の DOM 膨張を防ぐ） */
+  const MAX_MARKS_PER_PAGE = 12;
+  /** @type {Map<number, number>} */
+  const counts = new Map();
+
+  for (const m of state.matches) {
+    const pi = pageIndexOfOffset(state.pages, m.start);
+    if (pi < 0) continue;
+    const thumb = box.querySelector(`.thumb[data-i="${pi}"]`);
+    if (!thumb) continue;
+    thumb.classList.add('has-search');
+
+    const n = counts.get(pi) || 0;
+    if (n >= MAX_MARKS_PER_PAGE) {
+      counts.set(pi, n + 1);
+      continue;
+    }
+    counts.set(pi, n + 1);
+
+    const page = state.pages[pi];
+    const span = Math.max(1, page.range.end - page.range.start);
+    // ページ先頭=上、末尾=下（ミニマップの縦軸）
+    const rel = Math.min(1, Math.max(0, (m.start - page.range.start) / span));
+    const mark = document.createElement('span');
+    mark.className = 'tsearch';
+    mark.style.top = `${rel * 100}%`;
+    mark.title = '検索ヒット';
+    thumb.appendChild(mark);
+  }
 }
 
 function updateStatus() {
@@ -894,6 +969,7 @@ function doSearch() {
     state.matches = [];
     state.matchTotal = 0;
     $('searchCount').textContent = '';
+    updateThumbSearchMarks();
     renderCurrent();
     return;
   }
@@ -1113,6 +1189,7 @@ function bindUI() {
     state.matchTotal = 0;
     state.matchIndex = 0;
     $('searchCount').textContent = '';
+    updateThumbSearchMarks();
     renderCurrent();
   });
   $('searchBtn').addEventListener('click', doSearch);

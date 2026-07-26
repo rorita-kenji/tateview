@@ -1,6 +1,6 @@
 # 縦view（TateView）— 縦書き小説ビューア
 
-バージョン **v1.1**。配布ファイル名は `TateView.html`。  
+バージョン **v1.11**。配布ファイル名は `TateView.html`。  
 作者: [やまもりやもり](https://yamamori-yamori.github.io/mypage/)
 
 公募・投稿前の小説原稿を、縦書きで組版確認・校正するためのビューア。  
