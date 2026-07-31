@@ -60,48 +60,58 @@
     <div id="sidebar">
       <!-- 章/話記号: サムネ有無に関わらず常時表示（1行） -->
       <div id="markBar" class="mark-bar" title="行頭（半角/全角スペースのみ可）の見出し記号">
-        <label class="mark-ch">章記号：<input id="chapterMark" type="text" value="#" maxlength="16" spellcheck="false" autocomplete="off" /></label>
-        <label class="mark-ep">話記号：<input id="episodeMark" type="text" value="##" maxlength="16" spellcheck="false" autocomplete="off" /></label>
+        <label class="mark-ch"><span class="mark-lbl">章</span><input id="chapterMark" type="text" value="#" maxlength="16" spellcheck="false" autocomplete="off" title="章記号" /></label>
+        <label class="mark-ep"><span class="mark-lbl">話</span><input id="episodeMark" type="text" value="##" maxlength="16" spellcheck="false" autocomplete="off" title="話記号" /></label>
       </div>
       <div id="thumbs" title="全体ミニマップ — クリック／上下に撫でてページ移動"></div>
       <!-- 左メニュー: ページ移動 + 表示設定 -->
       <div id="controls">
         <div class="ctrl-row nav">
-          <button id="nextBtn">◀ 次</button>
-          <button id="prevBtn">前 ▶</button>
+          <button id="nextBtn" title="次ページ">◀</button>
+          <button id="prevBtn" title="前ページ">▶</button>
         </div>
-        <div class="ctrl-row status">
-          <label>ページ<input id="jumpInput" type="number" min="1" /></label>
-          <span>/ <span id="totalPages">0</span></span>
+        <div class="ctrl-row status page-jump">
+          <label title="ページ番号"><input id="jumpInput" type="number" min="1" /></label>
+          <span class="page-total">/<span id="totalPages">0</span></span>
         </div>
-        <div class="ctrl-row status">
-          <span><span id="pageChars">0</span>文字 / <span id="totalChars">0</span></span>
+        <div class="ctrl-row status char-status">
+          <span><span id="pageChars">0</span>字/<span id="totalChars">0</span></span>
           <span id="progress"></span>
         </div>
         <hr />
         <div class="ctrl-row checks">
           <label><input id="kinsoku" type="checkbox" />禁則</label>
-          <label><input id="burasage" type="checkbox" />ぶら下げ</label>
+          <label><input id="burasage" type="checkbox" />ぶら下</label>
           <label><input id="showRuby" type="checkbox" />ルビ</label>
-          <label><input id="halfColor" type="checkbox" />半角色</label>
+          <label><input id="halfColor" type="checkbox" />半角</label>
           <label><input id="spaceColor" type="checkbox" />空白</label>
           <label><input id="gridLines" type="checkbox" />升目</label>
         </div>
-        <div class="ctrl-row">
-          <label>テーマ<select id="themeSelect"><option value="light">ライト</option><option value="dark">ダーク</option></select></label>
+        <div class="ctrl-row theme-row">
+          <select id="themeSelect" title="テーマ"><option value="light">ライト</option><option value="dark">ダーク</option></select>
         </div>
         <div class="ctrl-row font-row">
-          <select id="fontSelect" title="書体"><option value="mincho">明朝</option><option value="gothic">ゴシック</option></select>
+          <select id="fontSelect" title="書体"><option value="mincho">明朝</option><option value="gothic">ゴシ</option></select>
           <select id="fontSize" title="字級"></select>
         </div>
         <div id="appCredit" class="app-credit">
           <span>v1.11</span>
-          <span>by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
+          <span class="credit-by">by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
         </div>
       </div>
     </div>
 
-    <div id="pageWrap" tabindex="-1"><div id="page"></div><span class="empty-hint">ファイルを<br>クリックまたはドロップ</span></div>
+    <div id="pageWrap" tabindex="-1">
+      <div id="pageStrip">
+        <div id="slotPeer" class="page-slot" hidden>
+          <div id="pagePeer" class="page-sheet"></div>
+        </div>
+        <div id="slotMain" class="page-slot">
+          <div id="page" class="page-sheet"></div>
+        </div>
+      </div>
+      <span class="empty-hint">ファイルを<br>クリックまたはドロップ</span>
+    </div>
 
     <aside>
       <div class="section">

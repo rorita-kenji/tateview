@@ -256,15 +256,56 @@ function renderCurrent() {
   const pageEl = $('page');
   if (!state.pages.length) {
     pageEl.textContent = '';
+    const peer = $('pagePeer');
+    if (peer) peer.textContent = '';
+    resetPageStrip(true);
     updateStatus();
     return;
   }
-  const page = state.pages[state.pageIndex];
+  // スワイプ確定アニメ中は中身を触らない（ストリップが隣ページを見せている）
+  if (pageSwipeLock) {
+    updateStatus();
+    return;
+  }
+  if (!pageSwipeActive) {
+    resetPageStrip(true);
+  }
+  paintPageSheet(pageEl, state.pageIndex, { highlights: true });
+  // fit scale
+  const wrap = $('pageWrap');
+  const availW = wrap.clientWidth - 44;
+  const availH = wrap.clientHeight - 44;
+  const ext = measureExtent(pageEl);
+  let scale = 1;
+  if (ext && ext.w > 0 && ext.h > 0) {
+    scale = Math.min(1, availW / ext.w, availH / ext.h);
+  }
+  pageFitScale = scale;
+  applySheetScale(pageEl);
+  if (pageSwipeActive && pageSwipePeerDir) {
+    const peerEl = $('pagePeer');
+    if (peerEl && peerEl.childNodes.length) applySheetScale(peerEl);
+    applyStripTransform({ live: true });
+  }
+  updateStatus();
+  persistPosition();
+}
+
+/**
+ * 1ページ分を sheet に描画。
+ * @param {HTMLElement} pageEl
+ * @param {number} pageIndex
+ * @param {{ highlights?: boolean }} [opt]
+ */
+function paintPageSheet(pageEl, pageIndex, opt) {
+  const page = state.pages[pageIndex];
+  if (!page || !pageEl) {
+    if (pageEl) pageEl.textContent = '';
+    return;
+  }
   pageEl.classList.toggle('grid', !!state.settings.gridLines);
   const highlights = [];
-  // 検索欄の文字列があれば ENTER 前でも表示ページ内を即時ハイライト
-  // （全文の件数・前次移動は Enter / 🔍 後の state.matches）
-  if (page && state.text) {
+  if (opt && opt.highlights && state.text) {
     const q = ($('searchInput') && $('searchInput').value) || '';
     if (q) {
       const live = searchInRange(state.text, q, page.range.start, page.range.end);
@@ -272,13 +313,11 @@ function renderCurrent() {
         highlights.push({ start: m.start, end: m.end, kind: 'search' });
       }
     }
+    if (state._warnHighlight) {
+      highlights.push({ ...state._warnHighlight, kind: 'warn' });
+    }
   }
-  if (state._warnHighlight) {
-    highlights.push({ ...state._warnHighlight, kind: 'warn' });
-  }
-
   const fs = effectiveFontSize();
-  pageEl.style.transform = 'none';
   applyFs(fs);
   renderPage(pageEl, state.text, page, {
     showRuby: state.settings.showRuby,
@@ -288,22 +327,12 @@ function renderCurrent() {
   });
   markHeadings(pageEl, page);
   buildRulers(pageEl, fs * 1.05);
+}
 
-  // 指定した行数・字数が必ず収まるよう、はみ出す分だけページ全体を等倍縮小する。
-  // フォント計算の誤差に依存せず、全列が確実に表示される。
-  const wrap = $('pageWrap');
-  const availW = wrap.clientWidth - 44;
-  const availH = wrap.clientHeight - 44;
-  const ext = measureExtent(pageEl);
-  let scale = 1;
-  if (ext && ext.w > 0 && ext.h > 0) {
-    scale = Math.min(1, availW / ext.w, availH / ext.h);
-  }
-  pageEl.style.transformOrigin = 'center center';
-  pageEl.style.transform = scale < 0.999 ? `scale(${scale})` : 'none';
-
-  updateStatus();
-  persistPosition();
+function applySheetScale(pageEl) {
+  if (!pageEl) return;
+  const s = pageFitScale < 0.999 ? pageFitScale : 1;
+  pageEl.style.transform = s === 1 ? 'none' : `scale(${s})`;
 }
 
 /** 表示に使う字級。auto 時はウィンドウに収まる最大、手動時は指定値（上限は maxFit） */
@@ -744,7 +773,9 @@ function go(delta) {
     state.pageIndex = ni;
     syncPendingFromPage();
     renderCurrent();
+    return true;
   }
+  return false;
 }
 function gotoPage(i) {
   state.pageIndex = clampPage(i);
@@ -776,24 +807,576 @@ function onKey(e) {
     e.preventDefault();
   }
 }
+
+/* ---------------- ページ捲り（タッチ横スワイプ / トラックパッド横ドラッグ） ----------------
+ * 現在ページ + 隣ページをストリップで並べ、translateX でスクロールイン。
+ * 閾値を超えたら静止待ちせずそのまま完了アニメ。
+ */
+let pageFitScale = 1;
+/** ストリップ横オフセット px（右=+ ＝次ページ方向） */
+let pageSwipeTx = 0;
+/** ドラッグ／wheel 追従中 */
+let pageSwipeActive = false;
+/** 閾値超え後の完了アニメ中（入力無視・render 抑制） */
+let pageSwipeLock = false;
+/** 表示中の隣ページ方向 1=次 / -1=前 / 0=なし */
+let pageSwipePeerDir = 0;
+let pageSwipePeerIndex = -1;
+/** コミット中の方向 */
+let pageSwipeCommitDir = 0;
+/** transitionend ハンドラ（中断時に外す） */
+let pageSwipeEndHandler = null;
+let pageSwipeAnimTimer = 0;
+let wheelSpringTimer = 0;
+let pageSwipeIdleTimer = 0;
 let wheelAccum = 0;
+/** commit 世代（遅延 finish の二重実行防止） */
+let pageSwipeGen = 0;
+/**
+ * いまのアクションで既に1ページ commit したか。
+ * 解除は「横入力が止まってから」だけ（固定時間だと慣性で2ページ目に入る）。
+ */
+let pageSwipePageTaken = false;
+
+/** 閾値（それ以上で自動完了）。実幅に対する割合も見る */
+const SWIPE_COMMIT_RATIO = 0.08;
+const SWIPE_COMMIT_MIN_PX = 28;
+const SWIPE_ANIM_MS = 220;
+/** 横入力がこの時間途切れたら次の1ページを許可 */
+const SWIPE_IDLE_CLEAR_MS = 300;
+
+function slideWidth() {
+  // スロットは #pageStrip の 100% 幅。pageWrap.clientWidth（padding 込み）だと
+  // 満幅アニメが行き過ぎて、复位で「戻る」ように見える。
+  const strip = $('pageStrip');
+  if (strip && strip.clientWidth > 40) return strip.clientWidth;
+  const wrap = $('pageWrap');
+  if (!wrap) return 600;
+  const cs = getComputedStyle(wrap);
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  return Math.max(200, (wrap.clientWidth || 600) - pad);
+}
+
+function commitThreshold() {
+  return Math.max(SWIPE_COMMIT_MIN_PX, slideWidth() * SWIPE_COMMIT_RATIO);
+}
+
+/**
+ * 横入力のたびに呼ぶ。入力が止まってから pageTaken を解除する。
+ * （finish 直後の固定タイマー解除だと、慣性で2ページ目が走る）
+ */
+function armSwipeIdleClear() {
+  if (pageSwipeIdleTimer) clearTimeout(pageSwipeIdleTimer);
+  pageSwipeIdleTimer = setTimeout(() => {
+    pageSwipeIdleTimer = 0;
+    if (pageSwipeLock) {
+      // アニメ中に明けない。終わってから再アーム
+      armSwipeIdleClear();
+      return;
+    }
+    pageSwipePageTaken = false;
+    pageSwipeTx = 0;
+    pageSwipeActive = false;
+  }, SWIPE_IDLE_CLEAR_MS);
+}
+
+/**
+ * 進行中の transition を破棄し、現在の見た目のまま固める。
+ * @param {HTMLElement} strip
+ */
+function freezeStripTransition(strip) {
+  if (!strip) return;
+  const comp = getComputedStyle(strip).transform;
+  strip.classList.remove('strip-anim', 'strip-live');
+  strip.style.transition = 'none';
+  // matrix を固定してから次の transform を書く（補間の逆走防止）
+  strip.style.transform = (!comp || comp === 'none') ? 'none' : comp;
+  // force reflow
+  void strip.offsetWidth;
+}
+
+/**
+ * ストリップ transform。
+ * @param {{ live?: boolean, anim?: boolean, killTransition?: boolean }} [opt]
+ */
+function applyStripTransform(opt) {
+  const strip = $('pageStrip');
+  if (!strip) return;
+  const live = !!(opt && opt.live);
+  const anim = !!(opt && opt.anim);
+  const kill = !!(opt && opt.killTransition);
+
+  if (kill) freezeStripTransition(strip);
+
+  strip.classList.toggle('strip-live', live);
+  strip.classList.toggle('strip-anim', anim && !live);
+
+  if (live || kill) {
+    strip.style.transition = 'none';
+  } else if (anim) {
+    strip.style.transition = '';
+  }
+
+  const tx = pageSwipeTx;
+  strip.style.transform = Math.abs(tx) < 0.4 ? 'none' : `translate3d(${tx}px,0,0)`;
+}
+
+function resetPageStrip(clearPeer) {
+  pageSwipeTx = 0;
+  pageSwipeActive = false;
+  pageSwipePeerDir = 0;
+  pageSwipePeerIndex = -1;
+  const strip = $('pageStrip');
+  if (strip) {
+    freezeStripTransition(strip);
+    strip.style.transform = 'none';
+    strip.classList.remove('strip-live', 'strip-anim');
+    requestAnimationFrame(() => {
+      if (!pageSwipeActive && !pageSwipeLock) strip.style.transition = '';
+    });
+  }
+  if (clearPeer) {
+    const slot = $('slotPeer');
+    const peer = $('pagePeer');
+    if (slot) {
+      slot.hidden = true;
+      slot.classList.remove('peer-next', 'peer-prev');
+    }
+    if (peer) peer.textContent = '';
+  }
+}
+
+/**
+ * 隣ページを slotPeer に用意（方向が変わったときだけ再描画）。
+ * @param {1|-1} dir
+ * @returns {boolean} 隣が存在するか
+ */
+function ensureSwipePeer(dir) {
+  const idx = state.pageIndex + dir;
+  if (idx < 0 || idx >= state.pages.length) {
+    hideSwipePeer();
+    return false;
+  }
+  const slot = $('slotPeer');
+  const peer = $('pagePeer');
+  if (!slot || !peer) return false;
+  if (pageSwipePeerDir === dir && pageSwipePeerIndex === idx && peer.childNodes.length) {
+    slot.hidden = false;
+    return true;
+  }
+  pageSwipePeerDir = dir;
+  pageSwipePeerIndex = idx;
+  slot.classList.toggle('peer-next', dir === 1);
+  slot.classList.toggle('peer-prev', dir === -1);
+  slot.hidden = false;
+  paintPageSheet(peer, idx, { highlights: false });
+  applySheetScale(peer);
+  return true;
+}
+
+function hideSwipePeer() {
+  pageSwipePeerDir = 0;
+  pageSwipePeerIndex = -1;
+  const slot = $('slotPeer');
+  const peer = $('pagePeer');
+  if (slot) {
+    slot.hidden = true;
+    slot.classList.remove('peer-next', 'peer-prev');
+  }
+  if (peer) peer.textContent = '';
+}
+
+/**
+ * 進行中の commit / spring アニメを破棄（finish は呼ばない）。
+ */
+function abortSwipeAnimation() {
+  const strip = $('pageStrip');
+  if (pageSwipeAnimTimer) {
+    clearTimeout(pageSwipeAnimTimer);
+    pageSwipeAnimTimer = 0;
+  }
+  if (strip && pageSwipeEndHandler) {
+    strip.removeEventListener('transitionend', pageSwipeEndHandler);
+    pageSwipeEndHandler = null;
+  }
+  pageSwipeGen += 1;
+}
+
+/**
+ * @param {number} tx
+ * @returns {'track'|'commit'|'block'}
+ */
+function trackSwipeTx(tx) {
+  if (!state.pages.length) return 'block';
+  // アニメ中 or このアクションで送信済 → 動かさない
+  if (pageSwipeLock || pageSwipePageTaken) return 'block';
+
+  const atStart = state.pageIndex <= 0;
+  const atEnd = state.pageIndex >= state.pages.length - 1;
+  let x = tx;
+  if (x > 0 && atEnd) x *= 0.25;
+  if (x < 0 && atStart) x *= 0.25;
+  const w = slideWidth();
+  x = Math.max(-w, Math.min(w, x));
+
+  pageSwipeActive = true;
+  pageSwipeTx = x;
+
+  if (Math.abs(x) > 2) {
+    const dir = /** @type {1|-1} */ (x > 0 ? 1 : -1);
+    const ok = ensureSwipePeer(dir);
+    if (!ok) {
+      pageSwipeTx = x * 0.5;
+      applyStripTransform({ live: true });
+      return 'track';
+    }
+  } else {
+    hideSwipePeer();
+  }
+  applyStripTransform({ live: true });
+
+  const th = commitThreshold();
+  const dir = pageSwipeTx > 0 ? 1 : -1;
+  if (Math.abs(pageSwipeTx) >= th) {
+    const target = clampPage(state.pageIndex + dir);
+    if (target !== state.pageIndex && ensureSwipePeer(dir)) {
+      commitSwipe(dir);
+      return 'commit';
+    }
+  }
+  return 'track';
+}
+
+/**
+ * @param {1|-1} dir
+ */
+function commitSwipe(dir) {
+  if (pageSwipeLock || pageSwipePageTaken) return;
+  if (!ensureSwipePeer(dir)) {
+    springSwipeHome();
+    return;
+  }
+  // このアクションでは1ページだけ
+  pageSwipePageTaken = true;
+  pageSwipeLock = true;
+  pageSwipeActive = true;
+  pageSwipeCommitDir = dir;
+  armSwipeIdleClear(); // 慣性イベントのあいだ taken を維持
+  if (wheelSpringTimer) {
+    clearTimeout(wheelSpringTimer);
+    wheelSpringTimer = 0;
+  }
+  const gen = ++pageSwipeGen;
+  const strip = $('pageStrip');
+  const w = slideWidth();
+  const target = dir * w;
+  let settled = false;
+
+  freezeStripTransition(strip);
+  pageSwipeTx = target;
+  requestAnimationFrame(() => {
+    if (gen !== pageSwipeGen || !pageSwipeLock) return;
+    if (strip) {
+      strip.classList.remove('strip-live');
+      strip.classList.add('strip-anim');
+      strip.style.transition = '';
+      strip.style.transform = `translate3d(${target}px,0,0)`;
+    }
+  });
+
+  const done = () => {
+    if (settled || gen !== pageSwipeGen) return;
+    settled = true;
+    if (pageSwipeAnimTimer) {
+      clearTimeout(pageSwipeAnimTimer);
+      pageSwipeAnimTimer = 0;
+    }
+    if (strip && pageSwipeEndHandler) {
+      strip.removeEventListener('transitionend', pageSwipeEndHandler);
+      pageSwipeEndHandler = null;
+    }
+    finishSwipeCommit(dir, gen);
+  };
+  /** @param {TransitionEvent} ev */
+  const onEnd = (ev) => {
+    if (ev.target !== strip) return;
+    if (ev.propertyName && ev.propertyName !== 'transform') return;
+    done();
+  };
+  pageSwipeEndHandler = onEnd;
+  if (strip) strip.addEventListener('transitionend', onEnd);
+
+  if (pageSwipeAnimTimer) clearTimeout(pageSwipeAnimTimer);
+  pageSwipeAnimTimer = setTimeout(done, SWIPE_ANIM_MS + 40);
+}
+
+/**
+ * @param {1|-1} dir
+ * @param {number} gen
+ */
+function finishSwipeCommit(dir, gen) {
+  if (gen !== pageSwipeGen) return;
+
+  const strip = $('pageStrip');
+  const pageEl = $('page');
+  const peerEl = $('pagePeer');
+
+  freezeStripTransition(strip);
+
+  const ni = clampPage(state.pageIndex + dir);
+  state.pageIndex = ni;
+  syncPendingFromPage();
+
+  const keepScale = pageFitScale;
+  if (peerEl && pageEl && peerEl.childNodes.length) {
+    pageEl.className = peerEl.className.includes('grid')
+      ? 'page-sheet grid'
+      : 'page-sheet';
+    pageEl.replaceChildren(...Array.from(peerEl.childNodes));
+  } else {
+    paintPageSheet(pageEl, state.pageIndex, { highlights: true });
+  }
+  pageFitScale = keepScale;
+  applySheetScale(pageEl);
+
+  pageSwipeTx = 0;
+  pageSwipeCommitDir = 0;
+  if (strip) {
+    strip.style.transition = 'none';
+    strip.style.transform = 'none';
+    strip.classList.remove('strip-anim', 'strip-live');
+    void strip.offsetWidth;
+  }
+  hideSwipePeer();
+
+  pageSwipeLock = false;
+  pageSwipeActive = false;
+  pageSwipeTx = 0;
+  // 次ページ許可は「入力アイドル」まで待つ（固定msだと慣性で2ページ目）
+  armSwipeIdleClear();
+  wheelAccum = 0;
+  if (wheelSpringTimer) {
+    clearTimeout(wheelSpringTimer);
+    wheelSpringTimer = 0;
+  }
+
+  const paintGen = pageSwipeGen;
+  requestAnimationFrame(() => {
+    if (pageSwipeLock || pageSwipeActive || paintGen !== pageSwipeGen) return;
+    paintPageSheet(pageEl, state.pageIndex, { highlights: true });
+    const wrap = $('pageWrap');
+    if (!wrap || !pageEl) return;
+    const availW = wrap.clientWidth - 44;
+    const availH = wrap.clientHeight - 44;
+    const ext = measureExtent(pageEl);
+    let scale = keepScale;
+    if (ext && ext.w > 0 && ext.h > 0) {
+      scale = Math.min(1, availW / ext.w, availH / ext.h);
+    }
+    pageFitScale = scale;
+    applySheetScale(pageEl);
+    if (strip) strip.style.transition = '';
+  });
+
+  updateStatus();
+  persistPosition();
+}
+
+/** 閾値未満: 元の位置へばね戻し */
+function springSwipeHome() {
+  if (pageSwipeLock || pageSwipePageTaken) return;
+  if (wheelSpringTimer) {
+    clearTimeout(wheelSpringTimer);
+    wheelSpringTimer = 0;
+  }
+  const gen = ++pageSwipeGen;
+  const strip = $('pageStrip');
+  let settled = false;
+  pageSwipeActive = true;
+  freezeStripTransition(strip);
+  pageSwipeTx = 0;
+  requestAnimationFrame(() => {
+    if (gen !== pageSwipeGen) return;
+    if (strip) {
+      strip.classList.add('strip-anim');
+      strip.classList.remove('strip-live');
+      strip.style.transition = '';
+      strip.style.transform = 'none';
+    }
+  });
+  if (pageSwipeAnimTimer) clearTimeout(pageSwipeAnimTimer);
+  const done = () => {
+    if (settled || gen !== pageSwipeGen) return;
+    settled = true;
+    pageSwipeAnimTimer = 0;
+    if (strip && pageSwipeEndHandler) {
+      strip.removeEventListener('transitionend', pageSwipeEndHandler);
+      pageSwipeEndHandler = null;
+    }
+    pageSwipeActive = false;
+    freezeStripTransition(strip);
+    hideSwipePeer();
+    resetPageStrip(true);
+    applySheetScale($('page'));
+  };
+  /** @param {TransitionEvent} ev */
+  const onEnd = (ev) => {
+    if (ev.target !== strip) return;
+    if (ev.propertyName && ev.propertyName !== 'transform') return;
+    done();
+  };
+  pageSwipeEndHandler = onEnd;
+  if (strip) strip.addEventListener('transitionend', onEnd);
+  pageSwipeAnimTimer = setTimeout(done, SWIPE_ANIM_MS + 40);
+}
+
+/**
+ * 指を離したとき: 未コミットなら閾値判定。
+ */
+function onSwipeRelease() {
+  if (pageSwipeLock) return;
+  if (pageSwipePageTaken) {
+    pageSwipeActive = false;
+    armSwipeIdleClear();
+    return;
+  }
+  if (Math.abs(pageSwipeTx) >= commitThreshold()) {
+    const dir = /** @type {1|-1} */ (pageSwipeTx > 0 ? 1 : -1);
+    if (clampPage(state.pageIndex + dir) !== state.pageIndex) {
+      commitSwipe(dir);
+      return;
+    }
+  }
+  if (Math.abs(pageSwipeTx) > 2) springSwipeHome();
+  else {
+    pageSwipeActive = false;
+    hideSwipePeer();
+    resetPageStrip(true);
+  }
+}
+
 function onWheel(e) {
+  // トラックパッド二本指横: 1アクション=1ページ。
+  // 送信後は入力が完全に止まってから次を受け付ける。
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 1.5) {
+    e.preventDefault();
+    if (!state.pages.length) return;
+
+    // 送信済／アニメ中: イベントは消費してアイドル解除タイマーだけ延長
+    if (pageSwipePageTaken || pageSwipeLock) {
+      pageSwipeTx = 0;
+      armSwipeIdleClear();
+      return;
+    }
+
+    const next = pageSwipeTx - e.deltaX;
+    const result = trackSwipeTx(next);
+    if (result === 'commit') {
+      armSwipeIdleClear();
+      return;
+    }
+
+    // 閾値未満のまま止まったらホームへ
+    if (wheelSpringTimer) clearTimeout(wheelSpringTimer);
+    wheelSpringTimer = setTimeout(() => {
+      wheelSpringTimer = 0;
+      if (!pageSwipeLock && !pageSwipePageTaken &&
+          pageSwipeActive && Math.abs(pageSwipeTx) < commitThreshold()) {
+        springSwipeHome();
+      }
+    }, 120);
+    return;
+  }
+
   e.preventDefault();
+  if (pageSwipeActive || pageSwipeLock || pageSwipePageTaken) return;
   wheelAccum += e.deltaY;
   if (Math.abs(wheelAccum) > 60) {
     go(wheelAccum > 0 ? 1 : -1);
     wheelAccum = 0;
   }
 }
+
+/**
+ * タッチ横スワイプ。1ドラッグ=1ページ。指を離してから次。
+ * @param {HTMLElement} el #pageWrap
+ */
 function installSwipe(el) {
-  let x0 = null;
-  el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
-  el.addEventListener('touchend', (e) => {
-    if (x0 === null) return;
-    const dx = e.changedTouches[0].clientX - x0;
-    // 右綴じ（縦書き）: 右スワイプ=次・左スワイプ=前（指の動きがページをめくる方向）
-    if (Math.abs(dx) > 40) go(dx > 0 ? 1 : -1);
-    x0 = null;
+  /** @type {number|null} */
+  let pointerId = null;
+  let x0 = 0;
+  let y0 = 0;
+  let baseTx = 0;
+  let axisLocked = /** @type {null|'h'|'v'} */ (null);
+
+  const onDown = (e) => {
+    if (!state.pages.length) return;
+    if (e.pointerType === 'mouse') return;
+    if (pointerId != null) return;
+    if (pageSwipeLock) return;
+    // 新しいドラッグ = 新しい1ページ枠
+    pageSwipePageTaken = false;
+    if (pageSwipeIdleTimer) {
+      clearTimeout(pageSwipeIdleTimer);
+      pageSwipeIdleTimer = 0;
+    }
+    pointerId = e.pointerId;
+    x0 = e.clientX;
+    y0 = e.clientY;
+    baseTx = 0;
+    pageSwipeTx = 0;
+    axisLocked = null;
+    pageSwipeActive = true;
+    try { el.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  };
+
+  const onMove = (e) => {
+    if (pointerId == null || e.pointerId !== pointerId) return;
+    if (pageSwipeLock || pageSwipePageTaken) return;
+    const dx = e.clientX - x0;
+    const dy = e.clientY - y0;
+    if (!axisLocked) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      axisLocked = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
+      if (axisLocked === 'v') {
+        pointerId = null;
+        try { el.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+        if (Math.abs(pageSwipeTx) > 2) springSwipeHome();
+        else {
+          pageSwipeActive = false;
+          resetPageStrip(true);
+        }
+        return;
+      }
+    }
+    if (axisLocked !== 'h') return;
+    e.preventDefault();
+    trackSwipeTx(baseTx + dx);
+  };
+
+  const onUp = (e) => {
+    if (pointerId == null || (e.pointerId != null && e.pointerId !== pointerId)) return;
+    pointerId = null;
+    axisLocked = null;
+    try {
+      if (e.pointerId != null) el.releasePointerCapture(e.pointerId);
+    } catch (_) { /* ignore */ }
+    onSwipeRelease();
+    // 指を離したら次のドラッグを受け付ける（quiet 中でも次タッチは onDown で解除）
+    if (!pageSwipeLock) pageSwipePageTaken = false;
+  };
+
+  el.addEventListener('pointerdown', onDown, { passive: true });
+  el.addEventListener('pointermove', onMove, { passive: false });
+  el.addEventListener('pointerup', onUp);
+  el.addEventListener('pointercancel', onUp);
+  el.addEventListener('lostpointercapture', () => {
+    if (pointerId == null) return;
+    pointerId = null;
+    if (!pageSwipeLock) {
+      onSwipeRelease();
+      pageSwipePageTaken = false;
+    }
   });
 }
 

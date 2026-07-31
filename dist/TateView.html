@@ -97,18 +97,13 @@ button.primary:hover { filter: brightness(1.08); }
 
 main { flex: 1; display: flex; min-height: 0; }
 
-/* 左サイドバー: サムネイル(上) + 下段メニュー(下) */
+/* 左サイドバー: サムネイル(上) + 下段メニュー(下)
+   幅は下段チェック2列が収まる最小付近（本文幅を優先） */
 #sidebar {
-  width: 152px; flex: 0 0 auto; display: flex; flex-direction: column;
+  width: 112px; flex: 0 0 auto; display: flex; flex-direction: column;
   background: var(--panel); border-right: 1px solid var(--border); min-height: 0;
 }
 
-/* iPad 等の狭い画面ではミニマップを半分に */
-@media (max-width: 1024px) {
-  #sidebar {
-    width: 76px;
-  }
-}
 /* 章/話記号バー（サムネの上・常時1行） */
 #markBar.mark-bar {
   flex: 0 0 auto;
@@ -116,8 +111,8 @@ main { flex: 1; display: flex; min-height: 0; }
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  gap: 2px 4px;
-  padding: 4px 5px;
+  gap: 2px 3px;
+  padding: 3px 3px;
   border-bottom: 1px solid var(--border);
   font-size: 10px;
   line-height: 1.2;
@@ -131,13 +126,14 @@ main { flex: 1; display: flex; min-height: 0; }
   white-space: nowrap;
   font-weight: 700;
 }
+#markBar .mark-lbl { flex: 0 0 auto; }
 #markBar .mark-ch { color: var(--heading1); }
 #markBar .mark-ep { color: var(--heading2); }
 #markBar input[type='text'] {
-  width: 2.2em;
-  min-width: 1.6em;
-  max-width: 3.2em;
-  padding: 1px 2px;
+  width: 1.8em;
+  min-width: 1.4em;
+  max-width: 2.6em;
+  padding: 1px 1px;
   font-size: 10px;
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   text-align: center;
@@ -151,7 +147,7 @@ main { flex: 1; display: flex; min-height: 0; }
   min-height: 0;
   overflow: hidden;
   position: relative;
-  padding: 3px 4px;
+  padding: 2px 2px;
   user-select: none;
   cursor: grab;
   touch-action: none;
@@ -162,30 +158,49 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 #thumbs.scrubbing { cursor: grabbing; }
 #thumbs:empty::after {
-  content: 'ページ一覧';
+  content: '一覧';
   display: block;
-  margin: 8px 4px;
-  font-size: 10px;
+  margin: 6px 2px;
+  font-size: 9px;
   opacity: 0.45;
   text-align: center;
 }
 #controls {
   flex: 0 0 auto; border-top: 1px solid var(--border);
-  padding: 5px; display: flex; flex-direction: column; gap: 3px; font-size: 11px;
+  padding: 3px; display: flex; flex-direction: column; gap: 2px; font-size: 10px;
 }
-#controls .ctrl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; }
-#controls .ctrl-row.nav { gap: 4px; }
-#controls .ctrl-row.nav button { flex: 1 1 auto; font-size: 11px; padding: 3px 4px; }
-#controls .ctrl-row.status { gap: 4px; opacity: 0.9; font-variant-numeric: tabular-nums; font-size: 12px; }
-#controls #jumpInput { width: 3.5em; font-size: 12px; }
+#controls .ctrl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+#controls .ctrl-row.nav { gap: 2px; }
+#controls .ctrl-row.nav button {
+  flex: 1 1 auto;
+  font-size: 12px;
+  padding: 2px 0;
+  line-height: 1.2;
+  min-width: 0;
+}
+#controls .ctrl-row.status {
+  gap: 2px;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  justify-content: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+#controls .ctrl-row.page-jump label { display: inline-flex; align-items: center; min-width: 0; }
+#controls #jumpInput { width: 2.6em; font-size: 11px; padding: 1px 2px; min-width: 0; }
 #controls #progress { color: var(--accent); min-height: 1em; }
 #controls hr { width: 100%; border: none; border-top: 1px solid var(--border); margin: 1px 0; }
 #controls #progress:empty { display: none; }
-#controls select { max-width: 100%; font-size: 11px; }
+#controls select { max-width: 100%; font-size: 10px; }
+#controls .ctrl-row.theme-row select {
+  width: 100%;
+  min-width: 0;
+}
 #controls .ctrl-row.font-row {
   display: flex;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
 }
 #controls .ctrl-row.font-row select {
@@ -193,34 +208,36 @@ main { flex: 1; display: flex; min-height: 0; }
   min-width: 0;
   max-width: none;
 }
-/* チェック6個をちょうど2列×3行 */
+/* チェック6個をちょうど2列×3行（短ラベルで狭幅対応） */
 #controls .ctrl-row.checks {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px 6px;
+  gap: 1px 3px;
   align-items: center;
 }
 #controls .ctrl-row.checks label {
-  gap: 2px;
-  font-size: 11px;
+  gap: 1px;
+  font-size: 10px;
   white-space: nowrap;
   min-width: 0;
+  overflow: hidden;
 }
 #controls .ctrl-row.checks input[type="checkbox"] {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   margin: 0;
+  flex: 0 0 auto;
 }
 #controls .app-credit {
-  margin-top: 4px;
-  padding-top: 4px;
+  margin-top: 2px;
+  padding-top: 3px;
   border-top: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 8px;
+  gap: 2px 6px;
   align-items: baseline;
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 9px;
+  line-height: 1.3;
   opacity: 0.62;
   color: var(--fg);
   user-select: none;
@@ -232,6 +249,85 @@ main { flex: 1; display: flex; min-height: 0; }
   cursor: pointer;
 }
 #controls .app-credit a:hover { opacity: 1; color: var(--accent); }
+
+/* iPad 等: サイドを半分。ナビ◀▶・クレジット・文字数は削り本文優先 */
+@media (max-width: 1024px) {
+  #sidebar {
+    width: 56px;
+  }
+  #markBar.mark-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 2px 2px;
+  }
+  #markBar label {
+    justify-content: center;
+    width: 100%;
+  }
+  #markBar .mark-lbl { display: none; }
+  #markBar input[type='text'] {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: 9px;
+    padding: 1px 0;
+  }
+  #thumbs {
+    padding: 1px;
+  }
+  #thumbs:empty::after {
+    content: '…';
+    font-size: 8px;
+    margin: 4px 0;
+  }
+  #controls {
+    padding: 2px 1px;
+    gap: 2px;
+    font-size: 9px;
+  }
+  #controls .ctrl-row.nav,
+  #controls .app-credit,
+  #controls .ctrl-row.char-status {
+    display: none;
+  }
+  #controls .ctrl-row.page-jump {
+    font-size: 9px;
+    gap: 0;
+  }
+  #controls #jumpInput {
+    width: 2.2em;
+    font-size: 9px;
+    padding: 0;
+  }
+  #controls .page-total { font-size: 9px; }
+  #controls .ctrl-row.checks {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  #controls .ctrl-row.checks label {
+    font-size: 9px;
+    gap: 0;
+  }
+  #controls .ctrl-row.checks input[type="checkbox"] {
+    width: 10px;
+    height: 10px;
+  }
+  #controls .ctrl-row.theme-row select,
+  #controls .ctrl-row.font-row select {
+    font-size: 8px;
+    padding: 0;
+  }
+  #controls .ctrl-row.font-row {
+    flex-direction: column;
+    gap: 1px;
+  }
+  #controls .ctrl-row.font-row select {
+    width: 100%;
+    flex: none;
+  }
+}
 .thumb {
   position: relative;
   flex: 1 1 0;
@@ -310,36 +406,44 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 .thumb .tnum {
   color: var(--fg);
-  opacity: 0.5;
+  opacity: 0.32;
   font-size: 9px;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto;
+  z-index: 0;
 }
-/* 章/話: タイトル長 ÷ 1行字数 の割合で横に伸ばす色バー。章(赤)を話(青)より強く */
+/* 章/話: 通常グレーより優先して見せる。章(赤)＞話(青) */
 .thumb .tmark {
   display: block;
   flex: 0 0 auto;
-  min-width: 10%;
+  min-width: 14%;
   max-width: 100%;
   width: 40%;
   border-radius: 1px;
   align-self: flex-start;
+  position: relative;
+  z-index: 2;
 }
 .thumb .tmark.h1 {
-  height: 5px;
+  height: 7px;
   background: var(--heading1);
   opacity: 1;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--heading1) 35%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--heading1) 55%, transparent),
+    0 0 6px color-mix(in srgb, var(--heading1) 35%, transparent);
 }
 .thumb .tmark.h2 {
-  height: 2px;
-  background: color-mix(in srgb, var(--heading2) 72%, transparent);
-  opacity: 0.72;
+  height: 4px;
+  background: var(--heading2);
+  opacity: 1;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--heading2) 45%, transparent),
+    0 0 4px color-mix(in srgb, var(--heading2) 28%, transparent);
 }
 .thumb .thead {
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 800;
   color: var(--heading1);
   line-height: 1.15;
   word-break: break-all;
@@ -349,28 +453,73 @@ main { flex: 1; display: flex; min-height: 0; }
   -webkit-line-clamp: 2;
   flex: 0 1 auto;
   min-height: 0;
+  position: relative;
+  z-index: 2;
+  opacity: 1;
+  text-shadow:
+    0 0 3px var(--bg),
+    0 0 2px var(--bg);
 }
 .thumb .thead.h2 {
-  color: color-mix(in srgb, var(--heading2) 78%, var(--fg));
-  font-weight: 600;
-  opacity: 0.85;
+  color: var(--heading2);
+  font-weight: 700;
+  opacity: 1;
+}
+/* 見出しがあるページ帯をわずかに色付け（グレー帯より見出しが勝つ） */
+.thumb:has(.tmark.h1) {
+  background: color-mix(in srgb, var(--heading1) 10%, var(--bg));
+}
+.thumb:has(.tmark.h2):not(:has(.tmark.h1)) {
+  background: color-mix(in srgb, var(--heading2) 9%, var(--bg));
+}
+.thumb.active:has(.tmark.h1) {
+  background: color-mix(in srgb, var(--heading1) 14%, color-mix(in srgb, var(--accent) 12%, var(--bg)));
+}
+.thumb.active:has(.tmark.h2):not(:has(.tmark.h1)) {
+  background: color-mix(in srgb, var(--heading2) 12%, color-mix(in srgb, var(--accent) 12%, var(--bg)));
+}
+/* 検索ヒット黄は見出し帯色より優先 */
+.thumb.has-search,
+.thumb.has-search:has(.tmark.h1),
+.thumb.has-search:has(.tmark.h2) {
+  background: color-mix(in srgb, var(--mark) 72%, var(--bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mark) 85%, var(--border));
+}
+.thumb.active.has-search,
+.thumb.active.has-search:has(.tmark.h1),
+.thumb.active.has-search:has(.tmark.h2) {
+  background: color-mix(in srgb, var(--mark) 62%, color-mix(in srgb, var(--accent) 12%, var(--bg)));
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+#thumbs.ultra .thumb.has-search,
+#thumbs.ultra .thumb.has-search:has(.tmark) {
+  background: color-mix(in srgb, var(--mark) 82%, var(--bg));
+}
+:root[data-theme='dark'] .thumb.has-search,
+:root[data-theme='dark'] .thumb.has-search:has(.tmark) {
+  background: color-mix(in srgb, #e6c84a 55%, var(--bg));
+}
+:root[data-theme='dark'] .thumb.active.has-search,
+:root[data-theme='dark'] .thumb.active.has-search:has(.tmark) {
+  background: color-mix(in srgb, #e6c84a 48%, color-mix(in srgb, var(--accent) 14%, var(--bg)));
 }
 
 /* 行が細いとき: 番号・本文を隠し、見出し色バーのみ強調 */
 #thumbs.compact .thumb { padding: 0 3px; gap: 1px; }
 #thumbs.compact .thumb .tnum { display: none; }
 #thumbs.compact .thumb .thead {
-  font-size: 8px;
+  font-size: 9px;
+  font-weight: 800;
   -webkit-line-clamp: 1;
 }
 #thumbs.compact .thumb .tmark.h1 {
-  height: 6px;
-  min-width: 14%;
+  height: 8px;
+  min-width: 18%;
 }
 #thumbs.compact .thumb .tmark.h2 {
-  height: 2.5px;
-  min-width: 10%;
-  opacity: 0.65;
+  height: 4.5px;
+  min-width: 14%;
+  opacity: 1;
 }
 #thumbs.ultra .thumb {
   padding: 0 2px;
@@ -386,16 +535,16 @@ main { flex: 1; display: flex; min-height: 0; }
   border-radius: 0;
 }
 #thumbs.ultra .thumb .tmark.h1 {
-  flex: 1.4 1 0;
-  min-height: 3px;
+  flex: 1.8 1 0;
+  min-height: 4px;
   max-height: 100%;
   opacity: 1;
 }
 #thumbs.ultra .thumb .tmark.h2 {
-  flex: 0.7 1 0;
-  min-height: 1px;
+  flex: 1.1 1 0;
+  min-height: 2.5px;
   max-height: 100%;
-  opacity: 0.55;
+  opacity: 1;
 }
 #thumbs.ultra {
   gap: 0;
@@ -415,13 +564,12 @@ main { flex: 1; display: flex; min-height: 0; }
   pointer-events: none;
   z-index: 3;
   box-sizing: border-box;
-  /* ラベル 20px が収まるよう最低高さ */
-  min-height: 24px;
+  min-height: 18px;
   overflow: visible;
 }
 #thumbs .thumb-viewport .vp-label {
   color: #8a8a8a;
-  font-size: 20px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -437,12 +585,68 @@ main { flex: 1; display: flex; min-height: 0; }
 :root[data-theme='dark'] #thumbs .thumb-viewport .vp-label {
   color: #9a9a9a;
 }
+@media (max-width: 1024px) {
+  #thumbs .thumb-viewport {
+    min-height: 14px;
+    left: 0;
+    right: 0;
+    border-width: 1px;
+  }
+  #thumbs .thumb-viewport .vp-label {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+}
 
-#pageWrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 22px; overflow: hidden; outline: none; }
-#page {
+#pageWrap {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 22px; overflow: hidden; outline: none;
+  touch-action: pan-y;
   position: relative;
-  display: flex; flex-direction: row-reverse; gap: 0.4em;
-  height: 100%; align-items: flex-start; justify-content: center;
+}
+/* 横スワイプ用ストリップ: 現在ページ + 隣ページを並べてスライド */
+#pageStrip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+#pageStrip.strip-live { transition: none !important; }
+#pageStrip.strip-anim {
+  /* overshoot しない ease-out */
+  transition: transform 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.page-slot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+#slotPeer.peer-next { left: -100%; } /* 次ページは左（右へ捲ると入ってくる） */
+#slotPeer.peer-prev { left: 100%; }
+.page-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 0.4em;
+  height: 100%;
+  align-items: flex-start;
+  justify-content: center;
+  transform-origin: center center;
+  max-width: 100%;
+}
+#pagePeer {
+  pointer-events: none;
+  user-select: none;
 }
 .col {
   writing-mode: vertical-rl;
@@ -651,48 +855,58 @@ footer .spacer { flex: 1; }
     <div id="sidebar">
       <!-- 章/話記号: サムネ有無に関わらず常時表示（1行） -->
       <div id="markBar" class="mark-bar" title="行頭（半角/全角スペースのみ可）の見出し記号">
-        <label class="mark-ch">章記号：<input id="chapterMark" type="text" value="#" maxlength="16" spellcheck="false" autocomplete="off" /></label>
-        <label class="mark-ep">話記号：<input id="episodeMark" type="text" value="##" maxlength="16" spellcheck="false" autocomplete="off" /></label>
+        <label class="mark-ch"><span class="mark-lbl">章</span><input id="chapterMark" type="text" value="#" maxlength="16" spellcheck="false" autocomplete="off" title="章記号" /></label>
+        <label class="mark-ep"><span class="mark-lbl">話</span><input id="episodeMark" type="text" value="##" maxlength="16" spellcheck="false" autocomplete="off" title="話記号" /></label>
       </div>
       <div id="thumbs" title="全体ミニマップ — クリック／上下に撫でてページ移動"></div>
       <!-- 左メニュー: ページ移動 + 表示設定 -->
       <div id="controls">
         <div class="ctrl-row nav">
-          <button id="nextBtn">◀ 次</button>
-          <button id="prevBtn">前 ▶</button>
+          <button id="nextBtn" title="次ページ">◀</button>
+          <button id="prevBtn" title="前ページ">▶</button>
         </div>
-        <div class="ctrl-row status">
-          <label>ページ<input id="jumpInput" type="number" min="1" /></label>
-          <span>/ <span id="totalPages">0</span></span>
+        <div class="ctrl-row status page-jump">
+          <label title="ページ番号"><input id="jumpInput" type="number" min="1" /></label>
+          <span class="page-total">/<span id="totalPages">0</span></span>
         </div>
-        <div class="ctrl-row status">
-          <span><span id="pageChars">0</span>文字 / <span id="totalChars">0</span></span>
+        <div class="ctrl-row status char-status">
+          <span><span id="pageChars">0</span>字/<span id="totalChars">0</span></span>
           <span id="progress"></span>
         </div>
         <hr />
         <div class="ctrl-row checks">
           <label><input id="kinsoku" type="checkbox" />禁則</label>
-          <label><input id="burasage" type="checkbox" />ぶら下げ</label>
+          <label><input id="burasage" type="checkbox" />ぶら下</label>
           <label><input id="showRuby" type="checkbox" />ルビ</label>
-          <label><input id="halfColor" type="checkbox" />半角色</label>
+          <label><input id="halfColor" type="checkbox" />半角</label>
           <label><input id="spaceColor" type="checkbox" />空白</label>
           <label><input id="gridLines" type="checkbox" />升目</label>
         </div>
-        <div class="ctrl-row">
-          <label>テーマ<select id="themeSelect"><option value="light">ライト</option><option value="dark">ダーク</option></select></label>
+        <div class="ctrl-row theme-row">
+          <select id="themeSelect" title="テーマ"><option value="light">ライト</option><option value="dark">ダーク</option></select>
         </div>
         <div class="ctrl-row font-row">
-          <select id="fontSelect" title="書体"><option value="mincho">明朝</option><option value="gothic">ゴシック</option></select>
+          <select id="fontSelect" title="書体"><option value="mincho">明朝</option><option value="gothic">ゴシ</option></select>
           <select id="fontSize" title="字級"></select>
         </div>
         <div id="appCredit" class="app-credit">
           <span>v1.11</span>
-          <span>by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
+          <span class="credit-by">by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
         </div>
       </div>
     </div>
 
-    <div id="pageWrap" tabindex="-1"><div id="page"></div><span class="empty-hint">ファイルを<br>クリックまたはドロップ</span></div>
+    <div id="pageWrap" tabindex="-1">
+      <div id="pageStrip">
+        <div id="slotPeer" class="page-slot" hidden>
+          <div id="pagePeer" class="page-sheet"></div>
+        </div>
+        <div id="slotMain" class="page-slot">
+          <div id="page" class="page-sheet"></div>
+        </div>
+      </div>
+      <span class="empty-hint">ファイルを<br>クリックまたはドロップ</span>
+    </div>
 
     <aside>
       <div class="section">
@@ -3782,15 +3996,56 @@ function renderCurrent() {
   const pageEl = $('page');
   if (!state.pages.length) {
     pageEl.textContent = '';
+    const peer = $('pagePeer');
+    if (peer) peer.textContent = '';
+    resetPageStrip(true);
     updateStatus();
     return;
   }
-  const page = state.pages[state.pageIndex];
+  // スワイプ確定アニメ中は中身を触らない（ストリップが隣ページを見せている）
+  if (pageSwipeLock) {
+    updateStatus();
+    return;
+  }
+  if (!pageSwipeActive) {
+    resetPageStrip(true);
+  }
+  paintPageSheet(pageEl, state.pageIndex, { highlights: true });
+  // fit scale
+  const wrap = $('pageWrap');
+  const availW = wrap.clientWidth - 44;
+  const availH = wrap.clientHeight - 44;
+  const ext = measureExtent(pageEl);
+  let scale = 1;
+  if (ext && ext.w > 0 && ext.h > 0) {
+    scale = Math.min(1, availW / ext.w, availH / ext.h);
+  }
+  pageFitScale = scale;
+  applySheetScale(pageEl);
+  if (pageSwipeActive && pageSwipePeerDir) {
+    const peerEl = $('pagePeer');
+    if (peerEl && peerEl.childNodes.length) applySheetScale(peerEl);
+    applyStripTransform({ live: true });
+  }
+  updateStatus();
+  persistPosition();
+}
+
+/**
+ * 1ページ分を sheet に描画。
+ * @param {HTMLElement} pageEl
+ * @param {number} pageIndex
+ * @param {{ highlights?: boolean }} [opt]
+ */
+function paintPageSheet(pageEl, pageIndex, opt) {
+  const page = state.pages[pageIndex];
+  if (!page || !pageEl) {
+    if (pageEl) pageEl.textContent = '';
+    return;
+  }
   pageEl.classList.toggle('grid', !!state.settings.gridLines);
   const highlights = [];
-  // 検索欄の文字列があれば ENTER 前でも表示ページ内を即時ハイライト
-  // （全文の件数・前次移動は Enter / 🔍 後の state.matches）
-  if (page && state.text) {
+  if (opt && opt.highlights && state.text) {
     const q = ($('searchInput') && $('searchInput').value) || '';
     if (q) {
       const live = searchInRange(state.text, q, page.range.start, page.range.end);
@@ -3798,13 +4053,11 @@ function renderCurrent() {
         highlights.push({ start: m.start, end: m.end, kind: 'search' });
       }
     }
+    if (state._warnHighlight) {
+      highlights.push({ ...state._warnHighlight, kind: 'warn' });
+    }
   }
-  if (state._warnHighlight) {
-    highlights.push({ ...state._warnHighlight, kind: 'warn' });
-  }
-
   const fs = effectiveFontSize();
-  pageEl.style.transform = 'none';
   applyFs(fs);
   renderPage(pageEl, state.text, page, {
     showRuby: state.settings.showRuby,
@@ -3814,22 +4067,12 @@ function renderCurrent() {
   });
   markHeadings(pageEl, page);
   buildRulers(pageEl, fs * 1.05);
+}
 
-  // 指定した行数・字数が必ず収まるよう、はみ出す分だけページ全体を等倍縮小する。
-  // フォント計算の誤差に依存せず、全列が確実に表示される。
-  const wrap = $('pageWrap');
-  const availW = wrap.clientWidth - 44;
-  const availH = wrap.clientHeight - 44;
-  const ext = measureExtent(pageEl);
-  let scale = 1;
-  if (ext && ext.w > 0 && ext.h > 0) {
-    scale = Math.min(1, availW / ext.w, availH / ext.h);
-  }
-  pageEl.style.transformOrigin = 'center center';
-  pageEl.style.transform = scale < 0.999 ? `scale(${scale})` : 'none';
-
-  updateStatus();
-  persistPosition();
+function applySheetScale(pageEl) {
+  if (!pageEl) return;
+  const s = pageFitScale < 0.999 ? pageFitScale : 1;
+  pageEl.style.transform = s === 1 ? 'none' : `scale(${s})`;
 }
 
 /** 表示に使う字級。auto 時はウィンドウに収まる最大、手動時は指定値（上限は maxFit） */
@@ -4270,7 +4513,9 @@ function go(delta) {
     state.pageIndex = ni;
     syncPendingFromPage();
     renderCurrent();
+    return true;
   }
+  return false;
 }
 function gotoPage(i) {
   state.pageIndex = clampPage(i);
@@ -4302,24 +4547,576 @@ function onKey(e) {
     e.preventDefault();
   }
 }
+
+/* ---------------- ページ捲り（タッチ横スワイプ / トラックパッド横ドラッグ） ----------------
+ * 現在ページ + 隣ページをストリップで並べ、translateX でスクロールイン。
+ * 閾値を超えたら静止待ちせずそのまま完了アニメ。
+ */
+let pageFitScale = 1;
+/** ストリップ横オフセット px（右=+ ＝次ページ方向） */
+let pageSwipeTx = 0;
+/** ドラッグ／wheel 追従中 */
+let pageSwipeActive = false;
+/** 閾値超え後の完了アニメ中（入力無視・render 抑制） */
+let pageSwipeLock = false;
+/** 表示中の隣ページ方向 1=次 / -1=前 / 0=なし */
+let pageSwipePeerDir = 0;
+let pageSwipePeerIndex = -1;
+/** コミット中の方向 */
+let pageSwipeCommitDir = 0;
+/** transitionend ハンドラ（中断時に外す） */
+let pageSwipeEndHandler = null;
+let pageSwipeAnimTimer = 0;
+let wheelSpringTimer = 0;
+let pageSwipeIdleTimer = 0;
 let wheelAccum = 0;
+/** commit 世代（遅延 finish の二重実行防止） */
+let pageSwipeGen = 0;
+/**
+ * いまのアクションで既に1ページ commit したか。
+ * 解除は「横入力が止まってから」だけ（固定時間だと慣性で2ページ目に入る）。
+ */
+let pageSwipePageTaken = false;
+
+/** 閾値（それ以上で自動完了）。実幅に対する割合も見る */
+const SWIPE_COMMIT_RATIO = 0.08;
+const SWIPE_COMMIT_MIN_PX = 28;
+const SWIPE_ANIM_MS = 220;
+/** 横入力がこの時間途切れたら次の1ページを許可 */
+const SWIPE_IDLE_CLEAR_MS = 300;
+
+function slideWidth() {
+  // スロットは #pageStrip の 100% 幅。pageWrap.clientWidth（padding 込み）だと
+  // 満幅アニメが行き過ぎて、复位で「戻る」ように見える。
+  const strip = $('pageStrip');
+  if (strip && strip.clientWidth > 40) return strip.clientWidth;
+  const wrap = $('pageWrap');
+  if (!wrap) return 600;
+  const cs = getComputedStyle(wrap);
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  return Math.max(200, (wrap.clientWidth || 600) - pad);
+}
+
+function commitThreshold() {
+  return Math.max(SWIPE_COMMIT_MIN_PX, slideWidth() * SWIPE_COMMIT_RATIO);
+}
+
+/**
+ * 横入力のたびに呼ぶ。入力が止まってから pageTaken を解除する。
+ * （finish 直後の固定タイマー解除だと、慣性で2ページ目が走る）
+ */
+function armSwipeIdleClear() {
+  if (pageSwipeIdleTimer) clearTimeout(pageSwipeIdleTimer);
+  pageSwipeIdleTimer = setTimeout(() => {
+    pageSwipeIdleTimer = 0;
+    if (pageSwipeLock) {
+      // アニメ中に明けない。終わってから再アーム
+      armSwipeIdleClear();
+      return;
+    }
+    pageSwipePageTaken = false;
+    pageSwipeTx = 0;
+    pageSwipeActive = false;
+  }, SWIPE_IDLE_CLEAR_MS);
+}
+
+/**
+ * 進行中の transition を破棄し、現在の見た目のまま固める。
+ * @param {HTMLElement} strip
+ */
+function freezeStripTransition(strip) {
+  if (!strip) return;
+  const comp = getComputedStyle(strip).transform;
+  strip.classList.remove('strip-anim', 'strip-live');
+  strip.style.transition = 'none';
+  // matrix を固定してから次の transform を書く（補間の逆走防止）
+  strip.style.transform = (!comp || comp === 'none') ? 'none' : comp;
+  // force reflow
+  void strip.offsetWidth;
+}
+
+/**
+ * ストリップ transform。
+ * @param {{ live?: boolean, anim?: boolean, killTransition?: boolean }} [opt]
+ */
+function applyStripTransform(opt) {
+  const strip = $('pageStrip');
+  if (!strip) return;
+  const live = !!(opt && opt.live);
+  const anim = !!(opt && opt.anim);
+  const kill = !!(opt && opt.killTransition);
+
+  if (kill) freezeStripTransition(strip);
+
+  strip.classList.toggle('strip-live', live);
+  strip.classList.toggle('strip-anim', anim && !live);
+
+  if (live || kill) {
+    strip.style.transition = 'none';
+  } else if (anim) {
+    strip.style.transition = '';
+  }
+
+  const tx = pageSwipeTx;
+  strip.style.transform = Math.abs(tx) < 0.4 ? 'none' : `translate3d(${tx}px,0,0)`;
+}
+
+function resetPageStrip(clearPeer) {
+  pageSwipeTx = 0;
+  pageSwipeActive = false;
+  pageSwipePeerDir = 0;
+  pageSwipePeerIndex = -1;
+  const strip = $('pageStrip');
+  if (strip) {
+    freezeStripTransition(strip);
+    strip.style.transform = 'none';
+    strip.classList.remove('strip-live', 'strip-anim');
+    requestAnimationFrame(() => {
+      if (!pageSwipeActive && !pageSwipeLock) strip.style.transition = '';
+    });
+  }
+  if (clearPeer) {
+    const slot = $('slotPeer');
+    const peer = $('pagePeer');
+    if (slot) {
+      slot.hidden = true;
+      slot.classList.remove('peer-next', 'peer-prev');
+    }
+    if (peer) peer.textContent = '';
+  }
+}
+
+/**
+ * 隣ページを slotPeer に用意（方向が変わったときだけ再描画）。
+ * @param {1|-1} dir
+ * @returns {boolean} 隣が存在するか
+ */
+function ensureSwipePeer(dir) {
+  const idx = state.pageIndex + dir;
+  if (idx < 0 || idx >= state.pages.length) {
+    hideSwipePeer();
+    return false;
+  }
+  const slot = $('slotPeer');
+  const peer = $('pagePeer');
+  if (!slot || !peer) return false;
+  if (pageSwipePeerDir === dir && pageSwipePeerIndex === idx && peer.childNodes.length) {
+    slot.hidden = false;
+    return true;
+  }
+  pageSwipePeerDir = dir;
+  pageSwipePeerIndex = idx;
+  slot.classList.toggle('peer-next', dir === 1);
+  slot.classList.toggle('peer-prev', dir === -1);
+  slot.hidden = false;
+  paintPageSheet(peer, idx, { highlights: false });
+  applySheetScale(peer);
+  return true;
+}
+
+function hideSwipePeer() {
+  pageSwipePeerDir = 0;
+  pageSwipePeerIndex = -1;
+  const slot = $('slotPeer');
+  const peer = $('pagePeer');
+  if (slot) {
+    slot.hidden = true;
+    slot.classList.remove('peer-next', 'peer-prev');
+  }
+  if (peer) peer.textContent = '';
+}
+
+/**
+ * 進行中の commit / spring アニメを破棄（finish は呼ばない）。
+ */
+function abortSwipeAnimation() {
+  const strip = $('pageStrip');
+  if (pageSwipeAnimTimer) {
+    clearTimeout(pageSwipeAnimTimer);
+    pageSwipeAnimTimer = 0;
+  }
+  if (strip && pageSwipeEndHandler) {
+    strip.removeEventListener('transitionend', pageSwipeEndHandler);
+    pageSwipeEndHandler = null;
+  }
+  pageSwipeGen += 1;
+}
+
+/**
+ * @param {number} tx
+ * @returns {'track'|'commit'|'block'}
+ */
+function trackSwipeTx(tx) {
+  if (!state.pages.length) return 'block';
+  // アニメ中 or このアクションで送信済 → 動かさない
+  if (pageSwipeLock || pageSwipePageTaken) return 'block';
+
+  const atStart = state.pageIndex <= 0;
+  const atEnd = state.pageIndex >= state.pages.length - 1;
+  let x = tx;
+  if (x > 0 && atEnd) x *= 0.25;
+  if (x < 0 && atStart) x *= 0.25;
+  const w = slideWidth();
+  x = Math.max(-w, Math.min(w, x));
+
+  pageSwipeActive = true;
+  pageSwipeTx = x;
+
+  if (Math.abs(x) > 2) {
+    const dir = /** @type {1|-1} */ (x > 0 ? 1 : -1);
+    const ok = ensureSwipePeer(dir);
+    if (!ok) {
+      pageSwipeTx = x * 0.5;
+      applyStripTransform({ live: true });
+      return 'track';
+    }
+  } else {
+    hideSwipePeer();
+  }
+  applyStripTransform({ live: true });
+
+  const th = commitThreshold();
+  const dir = pageSwipeTx > 0 ? 1 : -1;
+  if (Math.abs(pageSwipeTx) >= th) {
+    const target = clampPage(state.pageIndex + dir);
+    if (target !== state.pageIndex && ensureSwipePeer(dir)) {
+      commitSwipe(dir);
+      return 'commit';
+    }
+  }
+  return 'track';
+}
+
+/**
+ * @param {1|-1} dir
+ */
+function commitSwipe(dir) {
+  if (pageSwipeLock || pageSwipePageTaken) return;
+  if (!ensureSwipePeer(dir)) {
+    springSwipeHome();
+    return;
+  }
+  // このアクションでは1ページだけ
+  pageSwipePageTaken = true;
+  pageSwipeLock = true;
+  pageSwipeActive = true;
+  pageSwipeCommitDir = dir;
+  armSwipeIdleClear(); // 慣性イベントのあいだ taken を維持
+  if (wheelSpringTimer) {
+    clearTimeout(wheelSpringTimer);
+    wheelSpringTimer = 0;
+  }
+  const gen = ++pageSwipeGen;
+  const strip = $('pageStrip');
+  const w = slideWidth();
+  const target = dir * w;
+  let settled = false;
+
+  freezeStripTransition(strip);
+  pageSwipeTx = target;
+  requestAnimationFrame(() => {
+    if (gen !== pageSwipeGen || !pageSwipeLock) return;
+    if (strip) {
+      strip.classList.remove('strip-live');
+      strip.classList.add('strip-anim');
+      strip.style.transition = '';
+      strip.style.transform = `translate3d(${target}px,0,0)`;
+    }
+  });
+
+  const done = () => {
+    if (settled || gen !== pageSwipeGen) return;
+    settled = true;
+    if (pageSwipeAnimTimer) {
+      clearTimeout(pageSwipeAnimTimer);
+      pageSwipeAnimTimer = 0;
+    }
+    if (strip && pageSwipeEndHandler) {
+      strip.removeEventListener('transitionend', pageSwipeEndHandler);
+      pageSwipeEndHandler = null;
+    }
+    finishSwipeCommit(dir, gen);
+  };
+  /** @param {TransitionEvent} ev */
+  const onEnd = (ev) => {
+    if (ev.target !== strip) return;
+    if (ev.propertyName && ev.propertyName !== 'transform') return;
+    done();
+  };
+  pageSwipeEndHandler = onEnd;
+  if (strip) strip.addEventListener('transitionend', onEnd);
+
+  if (pageSwipeAnimTimer) clearTimeout(pageSwipeAnimTimer);
+  pageSwipeAnimTimer = setTimeout(done, SWIPE_ANIM_MS + 40);
+}
+
+/**
+ * @param {1|-1} dir
+ * @param {number} gen
+ */
+function finishSwipeCommit(dir, gen) {
+  if (gen !== pageSwipeGen) return;
+
+  const strip = $('pageStrip');
+  const pageEl = $('page');
+  const peerEl = $('pagePeer');
+
+  freezeStripTransition(strip);
+
+  const ni = clampPage(state.pageIndex + dir);
+  state.pageIndex = ni;
+  syncPendingFromPage();
+
+  const keepScale = pageFitScale;
+  if (peerEl && pageEl && peerEl.childNodes.length) {
+    pageEl.className = peerEl.className.includes('grid')
+      ? 'page-sheet grid'
+      : 'page-sheet';
+    pageEl.replaceChildren(...Array.from(peerEl.childNodes));
+  } else {
+    paintPageSheet(pageEl, state.pageIndex, { highlights: true });
+  }
+  pageFitScale = keepScale;
+  applySheetScale(pageEl);
+
+  pageSwipeTx = 0;
+  pageSwipeCommitDir = 0;
+  if (strip) {
+    strip.style.transition = 'none';
+    strip.style.transform = 'none';
+    strip.classList.remove('strip-anim', 'strip-live');
+    void strip.offsetWidth;
+  }
+  hideSwipePeer();
+
+  pageSwipeLock = false;
+  pageSwipeActive = false;
+  pageSwipeTx = 0;
+  // 次ページ許可は「入力アイドル」まで待つ（固定msだと慣性で2ページ目）
+  armSwipeIdleClear();
+  wheelAccum = 0;
+  if (wheelSpringTimer) {
+    clearTimeout(wheelSpringTimer);
+    wheelSpringTimer = 0;
+  }
+
+  const paintGen = pageSwipeGen;
+  requestAnimationFrame(() => {
+    if (pageSwipeLock || pageSwipeActive || paintGen !== pageSwipeGen) return;
+    paintPageSheet(pageEl, state.pageIndex, { highlights: true });
+    const wrap = $('pageWrap');
+    if (!wrap || !pageEl) return;
+    const availW = wrap.clientWidth - 44;
+    const availH = wrap.clientHeight - 44;
+    const ext = measureExtent(pageEl);
+    let scale = keepScale;
+    if (ext && ext.w > 0 && ext.h > 0) {
+      scale = Math.min(1, availW / ext.w, availH / ext.h);
+    }
+    pageFitScale = scale;
+    applySheetScale(pageEl);
+    if (strip) strip.style.transition = '';
+  });
+
+  updateStatus();
+  persistPosition();
+}
+
+/** 閾値未満: 元の位置へばね戻し */
+function springSwipeHome() {
+  if (pageSwipeLock || pageSwipePageTaken) return;
+  if (wheelSpringTimer) {
+    clearTimeout(wheelSpringTimer);
+    wheelSpringTimer = 0;
+  }
+  const gen = ++pageSwipeGen;
+  const strip = $('pageStrip');
+  let settled = false;
+  pageSwipeActive = true;
+  freezeStripTransition(strip);
+  pageSwipeTx = 0;
+  requestAnimationFrame(() => {
+    if (gen !== pageSwipeGen) return;
+    if (strip) {
+      strip.classList.add('strip-anim');
+      strip.classList.remove('strip-live');
+      strip.style.transition = '';
+      strip.style.transform = 'none';
+    }
+  });
+  if (pageSwipeAnimTimer) clearTimeout(pageSwipeAnimTimer);
+  const done = () => {
+    if (settled || gen !== pageSwipeGen) return;
+    settled = true;
+    pageSwipeAnimTimer = 0;
+    if (strip && pageSwipeEndHandler) {
+      strip.removeEventListener('transitionend', pageSwipeEndHandler);
+      pageSwipeEndHandler = null;
+    }
+    pageSwipeActive = false;
+    freezeStripTransition(strip);
+    hideSwipePeer();
+    resetPageStrip(true);
+    applySheetScale($('page'));
+  };
+  /** @param {TransitionEvent} ev */
+  const onEnd = (ev) => {
+    if (ev.target !== strip) return;
+    if (ev.propertyName && ev.propertyName !== 'transform') return;
+    done();
+  };
+  pageSwipeEndHandler = onEnd;
+  if (strip) strip.addEventListener('transitionend', onEnd);
+  pageSwipeAnimTimer = setTimeout(done, SWIPE_ANIM_MS + 40);
+}
+
+/**
+ * 指を離したとき: 未コミットなら閾値判定。
+ */
+function onSwipeRelease() {
+  if (pageSwipeLock) return;
+  if (pageSwipePageTaken) {
+    pageSwipeActive = false;
+    armSwipeIdleClear();
+    return;
+  }
+  if (Math.abs(pageSwipeTx) >= commitThreshold()) {
+    const dir = /** @type {1|-1} */ (pageSwipeTx > 0 ? 1 : -1);
+    if (clampPage(state.pageIndex + dir) !== state.pageIndex) {
+      commitSwipe(dir);
+      return;
+    }
+  }
+  if (Math.abs(pageSwipeTx) > 2) springSwipeHome();
+  else {
+    pageSwipeActive = false;
+    hideSwipePeer();
+    resetPageStrip(true);
+  }
+}
+
 function onWheel(e) {
+  // トラックパッド二本指横: 1アクション=1ページ。
+  // 送信後は入力が完全に止まってから次を受け付ける。
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 1.5) {
+    e.preventDefault();
+    if (!state.pages.length) return;
+
+    // 送信済／アニメ中: イベントは消費してアイドル解除タイマーだけ延長
+    if (pageSwipePageTaken || pageSwipeLock) {
+      pageSwipeTx = 0;
+      armSwipeIdleClear();
+      return;
+    }
+
+    const next = pageSwipeTx - e.deltaX;
+    const result = trackSwipeTx(next);
+    if (result === 'commit') {
+      armSwipeIdleClear();
+      return;
+    }
+
+    // 閾値未満のまま止まったらホームへ
+    if (wheelSpringTimer) clearTimeout(wheelSpringTimer);
+    wheelSpringTimer = setTimeout(() => {
+      wheelSpringTimer = 0;
+      if (!pageSwipeLock && !pageSwipePageTaken &&
+          pageSwipeActive && Math.abs(pageSwipeTx) < commitThreshold()) {
+        springSwipeHome();
+      }
+    }, 120);
+    return;
+  }
+
   e.preventDefault();
+  if (pageSwipeActive || pageSwipeLock || pageSwipePageTaken) return;
   wheelAccum += e.deltaY;
   if (Math.abs(wheelAccum) > 60) {
     go(wheelAccum > 0 ? 1 : -1);
     wheelAccum = 0;
   }
 }
+
+/**
+ * タッチ横スワイプ。1ドラッグ=1ページ。指を離してから次。
+ * @param {HTMLElement} el #pageWrap
+ */
 function installSwipe(el) {
-  let x0 = null;
-  el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
-  el.addEventListener('touchend', (e) => {
-    if (x0 === null) return;
-    const dx = e.changedTouches[0].clientX - x0;
-    // 右綴じ（縦書き）: 右スワイプ=次・左スワイプ=前（指の動きがページをめくる方向）
-    if (Math.abs(dx) > 40) go(dx > 0 ? 1 : -1);
-    x0 = null;
+  /** @type {number|null} */
+  let pointerId = null;
+  let x0 = 0;
+  let y0 = 0;
+  let baseTx = 0;
+  let axisLocked = /** @type {null|'h'|'v'} */ (null);
+
+  const onDown = (e) => {
+    if (!state.pages.length) return;
+    if (e.pointerType === 'mouse') return;
+    if (pointerId != null) return;
+    if (pageSwipeLock) return;
+    // 新しいドラッグ = 新しい1ページ枠
+    pageSwipePageTaken = false;
+    if (pageSwipeIdleTimer) {
+      clearTimeout(pageSwipeIdleTimer);
+      pageSwipeIdleTimer = 0;
+    }
+    pointerId = e.pointerId;
+    x0 = e.clientX;
+    y0 = e.clientY;
+    baseTx = 0;
+    pageSwipeTx = 0;
+    axisLocked = null;
+    pageSwipeActive = true;
+    try { el.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  };
+
+  const onMove = (e) => {
+    if (pointerId == null || e.pointerId !== pointerId) return;
+    if (pageSwipeLock || pageSwipePageTaken) return;
+    const dx = e.clientX - x0;
+    const dy = e.clientY - y0;
+    if (!axisLocked) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      axisLocked = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
+      if (axisLocked === 'v') {
+        pointerId = null;
+        try { el.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+        if (Math.abs(pageSwipeTx) > 2) springSwipeHome();
+        else {
+          pageSwipeActive = false;
+          resetPageStrip(true);
+        }
+        return;
+      }
+    }
+    if (axisLocked !== 'h') return;
+    e.preventDefault();
+    trackSwipeTx(baseTx + dx);
+  };
+
+  const onUp = (e) => {
+    if (pointerId == null || (e.pointerId != null && e.pointerId !== pointerId)) return;
+    pointerId = null;
+    axisLocked = null;
+    try {
+      if (e.pointerId != null) el.releasePointerCapture(e.pointerId);
+    } catch (_) { /* ignore */ }
+    onSwipeRelease();
+    // 指を離したら次のドラッグを受け付ける（quiet 中でも次タッチは onDown で解除）
+    if (!pageSwipeLock) pageSwipePageTaken = false;
+  };
+
+  el.addEventListener('pointerdown', onDown, { passive: true });
+  el.addEventListener('pointermove', onMove, { passive: false });
+  el.addEventListener('pointerup', onUp);
+  el.addEventListener('pointercancel', onUp);
+  el.addEventListener('lostpointercapture', () => {
+    if (pointerId == null) return;
+    pointerId = null;
+    if (!pageSwipeLock) {
+      onSwipeRelease();
+      pageSwipePageTaken = false;
+    }
   });
 }
 
