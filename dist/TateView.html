@@ -187,8 +187,26 @@ main { flex: 1; display: flex; min-height: 0; }
   flex-wrap: nowrap;
   min-width: 0;
 }
+#controls .ctrl-row.page-jump { flex-wrap: wrap; justify-content: center; }
 #controls .ctrl-row.page-jump label { display: inline-flex; align-items: center; min-width: 0; }
-#controls #jumpInput { width: 2.6em; font-size: 11px; padding: 1px 2px; min-width: 0; }
+/* ページ番号は4桁まで欠けずに出す。数値スピナーは幅を食うので消す */
+#controls #jumpInput {
+  width: 4ch;
+  box-sizing: content-box;
+  font-size: 11px;
+  padding: 1px 2px;
+  min-width: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+#controls #jumpInput::-webkit-outer-spin-button,
+#controls #jumpInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#controls .page-total { font-variant-numeric: tabular-nums; white-space: nowrap; }
 #controls #progress { color: var(--accent); min-height: 1em; }
 #controls hr { width: 100%; border: none; border-top: 1px solid var(--border); margin: 1px 0; }
 #controls #progress:empty { display: none; }
@@ -295,13 +313,19 @@ main { flex: 1; display: flex; min-height: 0; }
   #controls .ctrl-row.page-jump {
     font-size: 9px;
     gap: 0;
+    /* 幅56pxでも4桁が欠けないよう、入りきらなければ「/総数」を次行へ折り返す */
+    flex-wrap: wrap;
+    justify-content: center;
+    line-height: 1.15;
   }
+  #controls .ctrl-row.page-jump label { width: 100%; }
   #controls #jumpInput {
-    width: 2.2em;
-    font-size: 9px;
-    padding: 0;
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 10px;
+    padding: 0 1px;
   }
-  #controls .page-total { font-size: 9px; }
+  #controls .page-total { font-size: 9px; width: 100%; text-align: center; }
   #controls .ctrl-row.checks {
     grid-template-columns: 1fr;
     gap: 0;
@@ -601,7 +625,10 @@ main { flex: 1; display: flex; min-height: 0; }
 #pageWrap {
   flex: 1; display: flex; align-items: center; justify-content: center;
   padding: 22px; overflow: hidden; outline: none;
+  /* 横は自前で捲る。iPad Safari の「戻る」スワイプにも横方向を渡さない */
   touch-action: pan-y;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: contain;
   position: relative;
 }
 /* 横スワイプ用ストリップ: 現在ページ + 隣ページを並べてスライド */
@@ -617,8 +644,8 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 #pageStrip.strip-live { transition: none !important; }
 #pageStrip.strip-anim {
-  /* overshoot しない ease-out */
-  transition: transform 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
+  /* overshoot しない ease-out。連打を妨げないよう短め（JS の SWIPE_ANIM_MS と揃える） */
+  transition: transform 0.15s cubic-bezier(0.22, 0.75, 0.3, 1);
 }
 .page-slot {
   position: absolute;
@@ -808,6 +835,24 @@ footer .spacer { flex: 1; }
 #progress { color: var(--accent); }
 .hint { opacity: 0.7; }
 
+/* 診断モード（URL に #swipedebug を付けたときだけ生成される） */
+#swipeDebug {
+  position: fixed; right: 6px; bottom: 6px; z-index: 9999;
+  max-width: 46vw; max-height: 42vh; overflow: hidden;
+  background: rgba(0, 0, 0, 0.78); color: #7dffa0;
+  font: 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre; padding: 5px 7px; border-radius: 5px;
+  pointer-events: none; user-select: none;
+}
+
+#swipeRaw {
+  position: fixed; left: 6px; bottom: 6px; right: 6px; z-index: 9999;
+  background: rgba(0, 0, 0, 0.78); color: #ffd479;
+  font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 4px 6px; border-radius: 5px; word-break: break-all;
+  max-height: 22vh; overflow: hidden; user-select: text;
+}
+
 </style>
   <!-- Google tag (gtag.js) — https のみ（file://・http ローカルでは読み込まない） -->
   <script>
@@ -890,7 +935,7 @@ footer .spacer { flex: 1; }
           <select id="fontSize" title="字級"></select>
         </div>
         <div id="appCredit" class="app-credit">
-          <span>v1.11</span>
+          <span>v1.2</span>
           <span class="credit-by">by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
         </div>
       </div>
@@ -4548,46 +4593,115 @@ function onKey(e) {
   }
 }
 
-/* ---------------- ページ捲り（タッチ横スワイプ / トラックパッド横ドラッグ） ----------------
- * 現在ページ + 隣ページをストリップで並べ、translateX でスクロールイン。
- * 閾値を超えたら静止待ちせずそのまま完了アニメ。
+/* ---------------- ページ捲り（横スワイプ / トラックパッド横スクロール） ----------------
+ * カルーセル方式。#pageStrip を指に 1:1 で追従させ、隣ページをスライドインさせる。
+ *
+ * 1スワイプ＝1ページ。1回のジェスチャー中に送れるのは1ページだけで、
+ * 確定後の残りの指の動き・慣性イベントは捨てる（pageSwipeTaken）。
+ * ただしジェスチャーの切れ目では待たせない: 次の指が触れた瞬間／次の横スクロールが
+ * 始まった瞬間に、進行中の着地アニメを即確定して受け付ける（連続で捲れる）。
  */
 let pageFitScale = 1;
 /** ストリップ横オフセット px（右=+ ＝次ページ方向） */
 let pageSwipeTx = 0;
-/** ドラッグ／wheel 追従中 */
+/** ドラッグ開始時のストリップ位置（途中から引き継ぐ用） */
+let pageSwipeBase = 0;
+/** このジェスチャーで既に1ページ送ったか（1スワイプ＝1ページ） */
+let pageSwipeTaken = false;
+/** 指／ホイールで追従中 */
 let pageSwipeActive = false;
-/** 閾値超え後の完了アニメ中（入力無視・render 抑制） */
+/** 着地アニメ中（入力は受けるが render は抑制） */
 let pageSwipeLock = false;
 /** 表示中の隣ページ方向 1=次 / -1=前 / 0=なし */
 let pageSwipePeerDir = 0;
 let pageSwipePeerIndex = -1;
-/** コミット中の方向 */
-let pageSwipeCommitDir = 0;
 /** transitionend ハンドラ（中断時に外す） */
 let pageSwipeEndHandler = null;
 let pageSwipeAnimTimer = 0;
-let wheelSpringTimer = 0;
-let pageSwipeIdleTimer = 0;
-let wheelAccum = 0;
 /** commit 世代（遅延 finish の二重実行防止） */
 let pageSwipeGen = 0;
-/**
- * いまのアクションで既に1ページ commit したか。
- * 解除は「横入力が止まってから」だけ（固定時間だと慣性で2ページ目に入る）。
- */
-let pageSwipePageTaken = false;
+let wheelIdleTimer = 0;
+let wheelAccum = 0;
+let persistTimer = 0;
+/** 入力が止まってからハイライト再描画・字級フィットをやり直すまでの時間 */
+const SETTLE_QUIET_MS = 140;
+let settleTimer = 0;
+/* 横ホイールの慣性判別用。macOS の慣性イベントは |deltaX| が単調に減衰するので、
+   立ち上がり（増加）や逆向きを見れば「次のスワイプ」だと分かる。 */
+let wheelLastT = 0;
+let wheelLastDir = 0;
+let wheelPrevAbs = 0;
+/** 直近にホイールでページを送った時刻 */
+let wheelLastCommitT = -1e9;
+/** 間隔が詰まって送りきれなかったぶんの予約（符号つき枚数） */
+let wheelQueue = 0;
+let wheelQueueTimer = 0;
+/** 慣性が尽きた（次の有効な入力から新ジェスチャー） */
+let wheelEnded = false;
 
-/** 閾値（それ以上で自動完了）。実幅に対する割合も見る */
-const SWIPE_COMMIT_RATIO = 0.08;
-const SWIPE_COMMIT_MIN_PX = 28;
-const SWIPE_ANIM_MS = 220;
-/** 横入力がこの時間途切れたら次の1ページを許可 */
-const SWIPE_IDLE_CLEAR_MS = 300;
+
+/** 指を離した瞬間の判定。少しでも横に払っていれば送る（入力を捨てない） */
+const SWIPE_COMMIT_RATIO = 0.04;
+const SWIPE_COMMIT_MIN_PX = 20;
+/** フリック判定（px/ms）。ほとんど動かなくても勢いがあれば送る */
+const SWIPE_FLICK_V = 0.15;
+/** 「シュパパパ」を成立させるため着地は短く */
+const SWIPE_ANIM_MS = 150;
+/** 横ホイール（Mac トラックパッドの2本指スワイプ）の増幅率 */
+const WHEEL_GAIN = 1.8;
+/** 横ホイールがこの時間途切れたら1ジェスチャー終了とみなす */
+const WHEEL_IDLE_MS = 110;
+/** この間隔が空いたら別のスワイプ（慣性イベントは 16ms 前後で連続して来る） */
+const WHEEL_GAP_MS = 60;
+/** 新しいスワイプと認めるのに要る deltaX。慣性の尻尾を拾わないための下限 */
+const WHEEL_NEW_MIN_PX = 4;
+/** これ未満は「ほぼ止まっている」。慣性が尽きた／指が止まった目印 */
+const WHEEL_STOP_PX = 2;
+/** ホイールでページを送る最短間隔（誤検出の保険。連打は妨げない長さ） */
+const WHEEL_MIN_PAGE_MS = 100;
+/** 横ホイールはこれだけずれたら即確定（1スワイプ1ページなので軽くてよい） */
+const WHEEL_COMMIT_RATIO = 0.06;
+const WHEEL_COMMIT_MIN_PX = 30;
+/** ドラッグでここまで引き切ったら指を離す前に確定 */
+const SWIPE_FULL_RATIO = 0.98;
+
+/* --- 診断モード: URL の末尾に #swipedebug を付けると、
+       スワイプが実機でどう届いているかを画面に出す。通常は完全に無効。 --- */
+const SWIPE_DEBUG = typeof location !== 'undefined' && /swipedebug/.test(location.hash || '');
+let swipeLogEl = null;
+let swipeLogLines = [];
+/** @param {string} msg */
+function swipeLog(msg) {
+  if (!SWIPE_DEBUG) return;
+  if (!swipeLogEl) {
+    swipeLogEl = document.createElement('div');
+    swipeLogEl.id = 'swipeDebug';
+    document.body.appendChild(swipeLogEl);
+  }
+  swipeLogLines.push(msg);
+  if (swipeLogLines.length > 14) swipeLogLines.shift();
+  swipeLogEl.textContent = swipeLogLines.join('\n');
+}
+
+/** 生の入力列（切り分け用に1行で残す） */
+let swipeRawLine = [];
+function swipeRaw(dx, gap, isNew) {
+  if (!SWIPE_DEBUG) return;
+  swipeRawLine.push(`${dx > 0 ? '+' : '-'}${Math.abs(dx).toFixed(0)}` +
+    (gap > 40 ? `_${gap.toFixed(0)}ms` : '') + (isNew ? '★' : ''));
+  if (swipeRawLine.length > 60) swipeRawLine.shift();
+  const el = document.getElementById('swipeRaw') || (() => {
+    const d = document.createElement('div');
+    d.id = 'swipeRaw';
+    document.body.appendChild(d);
+    return d;
+  })();
+  el.textContent = swipeRawLine.join(' ');
+}
 
 function slideWidth() {
   // スロットは #pageStrip の 100% 幅。pageWrap.clientWidth（padding 込み）だと
-  // 満幅アニメが行き過ぎて、复位で「戻る」ように見える。
+  // 満幅アニメが行き過ぎて、復位で「戻る」ように見える。
   const strip = $('pageStrip');
   if (strip && strip.clientWidth > 40) return strip.clientWidth;
   const wrap = $('pageWrap');
@@ -4601,23 +4715,13 @@ function commitThreshold() {
   return Math.max(SWIPE_COMMIT_MIN_PX, slideWidth() * SWIPE_COMMIT_RATIO);
 }
 
-/**
- * 横入力のたびに呼ぶ。入力が止まってから pageTaken を解除する。
- * （finish 直後の固定タイマー解除だと、慣性で2ページ目が走る）
- */
-function armSwipeIdleClear() {
-  if (pageSwipeIdleTimer) clearTimeout(pageSwipeIdleTimer);
-  pageSwipeIdleTimer = setTimeout(() => {
-    pageSwipeIdleTimer = 0;
-    if (pageSwipeLock) {
-      // アニメ中に明けない。終わってから再アーム
-      armSwipeIdleClear();
-      return;
-    }
-    pageSwipePageTaken = false;
-    pageSwipeTx = 0;
-    pageSwipeActive = false;
-  }, SWIPE_IDLE_CLEAR_MS);
+/** 連続捲り中の位置保存は間引く（localStorage 書き込みでカクつかせない） */
+function schedulePersist() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = 0;
+    persistPosition();
+  }, 250);
 }
 
 /**
@@ -4663,6 +4767,7 @@ function applyStripTransform(opt) {
 
 function resetPageStrip(clearPeer) {
   pageSwipeTx = 0;
+  pageSwipeBase = 0;
   pageSwipeActive = false;
   pageSwipePeerDir = 0;
   pageSwipePeerIndex = -1;
@@ -4743,73 +4848,108 @@ function abortSwipeAnimation() {
 }
 
 /**
- * @param {number} tx
- * @returns {'track'|'commit'|'block'}
+ * アニメを待たずに 1ページ差し替える。
+ * peer が用意済みならその DOM をそのまま本体に移すので再描画は1枚分で済む。
+ * @param {1|-1} dir
+ * @returns {boolean} 送れたか（端なら false）
  */
-function trackSwipeTx(tx) {
-  if (!state.pages.length) return 'block';
-  // アニメ中 or このアクションで送信済 → 動かさない
-  if (pageSwipeLock || pageSwipePageTaken) return 'block';
+function stepPageInstant(dir) {
+  const ni = clampPage(state.pageIndex + dir);
+  if (ni === state.pageIndex) return false;
+  const pageEl = $('page');
+  const peerEl = $('pagePeer');
+  state.pageIndex = ni;
+  syncPendingFromPage();
 
-  const atStart = state.pageIndex <= 0;
-  const atEnd = state.pageIndex >= state.pages.length - 1;
-  let x = tx;
-  if (x > 0 && atEnd) x *= 0.25;
-  if (x < 0 && atStart) x *= 0.25;
-  const w = slideWidth();
-  x = Math.max(-w, Math.min(w, x));
-
-  pageSwipeActive = true;
-  pageSwipeTx = x;
-
-  if (Math.abs(x) > 2) {
-    const dir = /** @type {1|-1} */ (x > 0 ? 1 : -1);
-    const ok = ensureSwipePeer(dir);
-    if (!ok) {
-      pageSwipeTx = x * 0.5;
-      applyStripTransform({ live: true });
-      return 'track';
-    }
-  } else {
-    hideSwipePeer();
+  const keepScale = pageFitScale;
+  if (peerEl && pageEl && pageSwipePeerDir === dir &&
+      pageSwipePeerIndex === ni && peerEl.childNodes.length) {
+    pageEl.className = peerEl.className.includes('grid') ? 'page-sheet grid' : 'page-sheet';
+    pageEl.replaceChildren(...Array.from(peerEl.childNodes));
+    peerEl.textContent = '';
+    pageSwipePeerDir = 0;
+    pageSwipePeerIndex = -1;
+  } else if (pageEl) {
+    paintPageSheet(pageEl, ni, { highlights: false });
   }
-  applyStripTransform({ live: true });
-
-  const th = commitThreshold();
-  const dir = pageSwipeTx > 0 ? 1 : -1;
-  if (Math.abs(pageSwipeTx) >= th) {
-    const target = clampPage(state.pageIndex + dir);
-    if (target !== state.pageIndex && ensureSwipePeer(dir)) {
-      commitSwipe(dir);
-      return 'commit';
-    }
-  }
-  return 'track';
+  pageFitScale = keepScale;
+  applySheetScale(pageEl);
+  updateStatus();
+  schedulePersist();
+  return true;
 }
 
 /**
+ * 追従の中心。1スワイプ＝1ページなので、確定済みならもう動かさない。
+ * 1ページ分まで引き切ったら、指を離す前でもその場で確定する。
+ * @param {number} x 望みのストリップ位置 px
+ */
+function trackSwipeTx(x) {
+  if (!state.pages.length) return;
+  // 確定済み／着地アニメ中: このジェスチャーの残りは捨てる
+  if (pageSwipeTaken || pageSwipeLock) return;
+
+  const w = slideWidth();
+  let tx = x;
+
+  // 端では引っぱっても付いてこない（ゴムバンド）
+  const atStart = state.pageIndex <= 0;
+  const atEnd = state.pageIndex >= state.pages.length - 1;
+  if ((tx > 0 && atEnd) || (tx < 0 && atStart)) {
+    const sgn = tx > 0 ? 1 : -1;
+    tx = sgn * Math.min(w * 0.2, Math.abs(tx) * 0.3);
+  }
+  // 隣ページ1枚ぶんより先へは行かせない
+  tx = Math.max(-w, Math.min(w, tx));
+
+  pageSwipeActive = true;
+  pageSwipeTx = tx;
+
+  if (Math.abs(tx) > 1) ensureSwipePeer(/** @type {1|-1} */ (tx > 0 ? 1 : -1));
+  else hideSwipePeer();
+
+  applyStripTransform({ live: true });
+
+  if (Math.abs(tx) >= w * SWIPE_FULL_RATIO) {
+    const dir = /** @type {1|-1} */ (tx > 0 ? 1 : -1);
+    if (clampPage(state.pageIndex + dir) !== state.pageIndex) commitSwipe(dir);
+  }
+}
+
+/**
+ * 新しいスワイプの開始。着地アニメが残っていれば待たずに確定させる。
+ * これが無いと素早い連続スワイプが食われる。
+ */
+function beginSwipeGesture() {
+  if (pageSwipeLock) settleSwipeNow();
+  abortSwipeAnimation();
+  pageSwipeTaken = false;
+  if (wheelIdleTimer) {
+    clearTimeout(wheelIdleTimer);
+    wheelIdleTimer = 0;
+  }
+}
+
+/**
+ * 着地アニメ。dir 方向へ1ページ分スライドしてから差し替える。
  * @param {1|-1} dir
  */
 function commitSwipe(dir) {
-  if (pageSwipeLock || pageSwipePageTaken) return;
-  if (!ensureSwipePeer(dir)) {
-    springSwipeHome();
+  swipeLog(`commit ${dir > 0 ? '次' : '前'} p${state.pageIndex + 1}` +
+    (pageSwipeTaken ? ' [済のため無視]' : ''));
+  if (pageSwipeTaken || !ensureSwipePeer(dir)) {
+    if (!pageSwipeTaken) springSwipeHome();
     return;
   }
-  // このアクションでは1ページだけ
-  pageSwipePageTaken = true;
+  abortSwipeAnimation();
+  // このジェスチャーで送れるのはここまで（残りの指の動き・慣性は捨てる）
+  pageSwipeTaken = true;
   pageSwipeLock = true;
-  pageSwipeActive = true;
-  pageSwipeCommitDir = dir;
-  armSwipeIdleClear(); // 慣性イベントのあいだ taken を維持
-  if (wheelSpringTimer) {
-    clearTimeout(wheelSpringTimer);
-    wheelSpringTimer = 0;
-  }
+  pageSwipeActive = false;
+
   const gen = ++pageSwipeGen;
   const strip = $('pageStrip');
-  const w = slideWidth();
-  const target = dir * w;
+  const target = dir * slideWidth();
   let settled = false;
 
   freezeStripTransition(strip);
@@ -4856,31 +4996,14 @@ function commitSwipe(dir) {
  */
 function finishSwipeCommit(dir, gen) {
   if (gen !== pageSwipeGen) return;
-
   const strip = $('pageStrip');
   const pageEl = $('page');
-  const peerEl = $('pagePeer');
 
   freezeStripTransition(strip);
-
-  const ni = clampPage(state.pageIndex + dir);
-  state.pageIndex = ni;
-  syncPendingFromPage();
-
-  const keepScale = pageFitScale;
-  if (peerEl && pageEl && peerEl.childNodes.length) {
-    pageEl.className = peerEl.className.includes('grid')
-      ? 'page-sheet grid'
-      : 'page-sheet';
-    pageEl.replaceChildren(...Array.from(peerEl.childNodes));
-  } else {
-    paintPageSheet(pageEl, state.pageIndex, { highlights: true });
-  }
-  pageFitScale = keepScale;
-  applySheetScale(pageEl);
+  stepPageInstant(dir);
 
   pageSwipeTx = 0;
-  pageSwipeCommitDir = 0;
+  pageSwipeBase = 0;
   if (strip) {
     strip.style.transition = 'none';
     strip.style.transform = 'none';
@@ -4888,53 +5011,56 @@ function finishSwipeCommit(dir, gen) {
     void strip.offsetWidth;
   }
   hideSwipePeer();
-
   pageSwipeLock = false;
   pageSwipeActive = false;
-  pageSwipeTx = 0;
-  // 次ページ許可は「入力アイドル」まで待つ（固定msだと慣性で2ページ目）
-  armSwipeIdleClear();
   wheelAccum = 0;
-  if (wheelSpringTimer) {
-    clearTimeout(wheelSpringTimer);
-    wheelSpringTimer = 0;
-  }
 
-  const paintGen = pageSwipeGen;
-  requestAnimationFrame(() => {
-    if (pageSwipeLock || pageSwipeActive || paintGen !== pageSwipeGen) return;
-    paintPageSheet(pageEl, state.pageIndex, { highlights: true });
+  settleCurrentPage(pageEl, strip);
+}
+
+/**
+ * 捲り終わりの後始末: ハイライト付きで描き直して字級フィットを取り直す。
+ * 連続捲り中は呼ばない（重いので着地時だけ）。
+ */
+function settleCurrentPage(pageEl, strip) {
+  // 連打中は走らせない。ハイライト再描画＋実寸計測はページ1枚ぶんの
+  // 強制レイアウトを伴うので、1捲りごとに実行すると入力が詰まる。
+  if (settleTimer) clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    settleTimer = 0;
+    if (pageSwipeLock || pageSwipeActive || wheelQueue) {
+      settleCurrentPage(pageEl, strip); // まだ動いている。落ち着いてから
+      return;
+    }
+    const el = pageEl || $('page');
+    if (!el) return;
+    paintPageSheet(el, state.pageIndex, { highlights: true });
     const wrap = $('pageWrap');
-    if (!wrap || !pageEl) return;
+    if (!wrap) return;
     const availW = wrap.clientWidth - 44;
     const availH = wrap.clientHeight - 44;
-    const ext = measureExtent(pageEl);
-    let scale = keepScale;
+    const ext = measureExtent(el);
     if (ext && ext.w > 0 && ext.h > 0) {
-      scale = Math.min(1, availW / ext.w, availH / ext.h);
+      pageFitScale = Math.min(1, availW / ext.w, availH / ext.h);
     }
-    pageFitScale = scale;
-    applySheetScale(pageEl);
-    if (strip) strip.style.transition = '';
-  });
-
-  updateStatus();
-  persistPosition();
+    applySheetScale(el);
+    const st = strip || $('pageStrip');
+    if (st) st.style.transition = '';
+    updateStatus();
+    schedulePersist();
+  }, SETTLE_QUIET_MS);
 }
 
 /** 閾値未満: 元の位置へばね戻し */
 function springSwipeHome() {
-  if (pageSwipeLock || pageSwipePageTaken) return;
-  if (wheelSpringTimer) {
-    clearTimeout(wheelSpringTimer);
-    wheelSpringTimer = 0;
-  }
+  abortSwipeAnimation();
   const gen = ++pageSwipeGen;
   const strip = $('pageStrip');
   let settled = false;
   pageSwipeActive = true;
   freezeStripTransition(strip);
   pageSwipeTx = 0;
+  pageSwipeBase = 0;
   requestAnimationFrame(() => {
     if (gen !== pageSwipeGen) return;
     if (strip) {
@@ -4958,6 +5084,9 @@ function springSwipeHome() {
     hideSwipePeer();
     resetPageStrip(true);
     applySheetScale($('page'));
+    // 連続捲りの途中で戻した場合もページは進んでいるので、
+    // ハイライトと字級フィットを取り直す。
+    settleCurrentPage($('page'), strip);
   };
   /** @param {TransitionEvent} ev */
   const onEnd = (ev) => {
@@ -4971,65 +5100,135 @@ function springSwipeHome() {
 }
 
 /**
- * 指を離したとき: 未コミットなら閾値判定。
+ * 着地アニメ中に次の入力が来たら、待たずに結果だけ確定して受け付ける。
+ * （これが無いと素早い連打が食われる）
  */
-function onSwipeRelease() {
+function settleSwipeNow() {
+  if (!pageSwipeLock) return;
+  const dir = pageSwipeTx > 0 ? 1 : -1;
+  abortSwipeAnimation();
+  pageSwipeLock = false;
+  finishSwipeCommit(/** @type {1|-1} */ (dir), pageSwipeGen);
+}
+
+/**
+ * 指を離したとき: 移動量か勢いでページを送る／戻す。
+ * @param {number} [velocity] px/ms（右方向が +）
+ */
+function onSwipeRelease(velocity) {
   if (pageSwipeLock) return;
-  if (pageSwipePageTaken) {
-    pageSwipeActive = false;
-    armSwipeIdleClear();
+  pageSwipeActive = false;
+  if (pageSwipeTaken) return; // 1スワイプ1ページ: もう送らない
+  const tx = pageSwipeTx;
+  const v = velocity || 0;
+  let dir = 0;
+  if (Math.abs(tx) >= commitThreshold()) dir = tx > 0 ? 1 : -1;
+  else if (Math.abs(v) >= SWIPE_FLICK_V && Math.abs(tx) > 4) dir = v > 0 ? 1 : -1;
+
+  if (dir && clampPage(state.pageIndex + dir) !== state.pageIndex) {
+    commitSwipe(/** @type {1|-1} */ (dir));
     return;
   }
-  if (Math.abs(pageSwipeTx) >= commitThreshold()) {
-    const dir = /** @type {1|-1} */ (pageSwipeTx > 0 ? 1 : -1);
-    if (clampPage(state.pageIndex + dir) !== state.pageIndex) {
-      commitSwipe(dir);
-      return;
-    }
-  }
-  if (Math.abs(pageSwipeTx) > 2) springSwipeHome();
+  if (Math.abs(tx) > 1) springSwipeHome();
   else {
-    pageSwipeActive = false;
     hideSwipePeer();
     resetPageStrip(true);
   }
 }
 
+/**
+ * この wheel イベントが「新しいスワイプの開始」か。
+ *
+ * Chrome は「指の動きか慣性か」を JS に教えてくれない。慣性は途切れずに
+ * 流れ続けるので、速度の変化から推測すると 1スクロールで複数ページ進む
+ * 誤検出が避けられない。そこで推測はやめ、誤検出しない事実だけを使う:
+ *   - イベントの流れが途切れた
+ *   - 逆向きに振った
+ *   - ほぼ停止（慣性が尽きた）あとに、また動き出した
+ * これ以外は、どれだけ強く払われても同じ1スワイプの続きとみなす。
+ * @param {number} dx deltaX
+ * @param {number} t timeStamp
+ */
+function isNewWheelSwipe(dx, t) {
+  const abs = Math.abs(dx);
+  const dir = dx > 0 ? 1 : -1;
+  if (!wheelLastT) return true;
+  const gap = t - wheelLastT;
+
+  // ほぼ停止 = このジェスチャーは終わり。次のまともな入力から数え直す
+  if (abs < WHEEL_STOP_PX) {
+    wheelEnded = true;
+    wheelLastDir = 0;
+    return false;
+  }
+  if (abs < WHEEL_NEW_MIN_PX) {
+    // 慣性の尻尾。間が空いていたら前のジェスチャーは終わったとみなす
+    if (gap > WHEEL_GAP_MS) {
+      wheelEnded = true;
+      wheelLastDir = 0;
+    }
+    return false;
+  }
+  if (gap > WHEEL_GAP_MS) return true;                   // 流れが途切れた
+  if (wheelEnded) return true;                           // 止まったあと動き出した
+  if (wheelLastDir && dir !== wheelLastDir) return true; // 逆向きに振った
+  return false;
+}
+
+function wheelCommitThreshold() {
+  return Math.max(WHEEL_COMMIT_MIN_PX, slideWidth() * WHEEL_COMMIT_RATIO);
+}
+
 function onWheel(e) {
-  // トラックパッド二本指横: 1アクション=1ページ。
-  // 送信後は入力が完全に止まってから次を受け付ける。
-  if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 1.5) {
+  // Mac トラックパッドの2本指横スワイプ。1スワイプ＝1ページ。
+  // 慣性は捨てるが、慣性の途中に来た「次のスワイプ」は必ず拾う（＝シュパパパ）。
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 0.5) {
     e.preventDefault();
     if (!state.pages.length) return;
 
-    // 送信済／アニメ中: イベントは消費してアイドル解除タイマーだけ延長
-    if (pageSwipePageTaken || pageSwipeLock) {
-      pageSwipeTx = 0;
-      armSwipeIdleClear();
-      return;
+    const t = e.timeStamp || performance.now();
+    const dx = e.deltaX;
+    const isNew = isNewWheelSwipe(dx, t);
+    swipeRaw(dx, wheelLastT ? t - wheelLastT : 0, isNew);
+    swipeLog(`w dx=${dx.toFixed(1)} gap=${wheelLastT ? (t - wheelLastT).toFixed(0) : '-'}` +
+      `${wheelEnded ? ' 停止後' : ''}${isNew ? ' ★NEW' : (pageSwipeTaken ? ' (捨)' : '')}`);
+    const abs = Math.abs(dx);
+    if (isNew) {
+      beginSwipeGesture();
+      wheelEnded = false;
     }
+    wheelPrevAbs = abs;
+    wheelLastT = t;
+    // 向きは「意味のある大きさの入力」だけで更新する。
+    // 慣性の尻尾で上書きすると、逆向きへの振り直しを取りこぼす。
+    if (abs >= WHEEL_NEW_MIN_PX) wheelLastDir = dx > 0 ? 1 : -1;
 
-    const next = pageSwipeTx - e.deltaX;
-    const result = trackSwipeTx(next);
-    if (result === 'commit') {
-      armSwipeIdleClear();
-      return;
-    }
+    trackSwipeTx(pageSwipeTx - dx * WHEEL_GAIN);
 
-    // 閾値未満のまま止まったらホームへ
-    if (wheelSpringTimer) clearTimeout(wheelSpringTimer);
-    wheelSpringTimer = setTimeout(() => {
-      wheelSpringTimer = 0;
-      if (!pageSwipeLock && !pageSwipePageTaken &&
-          pageSwipeActive && Math.abs(pageSwipeTx) < commitThreshold()) {
-        springSwipeHome();
+    // 指を離すイベントが無いので、少しずれた時点で確定してしまう
+    if (!pageSwipeTaken && Math.abs(pageSwipeTx) >= wheelCommitThreshold()) {
+      const dir = /** @type {1|-1} */ (pageSwipeTx > 0 ? 1 : -1);
+      if (t - wheelLastCommitT < WHEEL_MIN_PAGE_MS) {
+        // 送った直後。捨てずに予約して、間隔が空いてから必ず送る
+        swipeLog('queue');
+        pageSwipeTaken = true;
+        pageSwipeTx = 0;
+        applyStripTransform({ live: true });
+        queueWheelPage(dir, WHEEL_MIN_PAGE_MS - (t - wheelLastCommitT));
+      } else if (clampPage(state.pageIndex + dir) !== state.pageIndex) {
+        wheelLastCommitT = t;
+        commitSwipe(dir);
       }
-    }, 120);
+    }
+
+    if (wheelIdleTimer) clearTimeout(wheelIdleTimer);
+    wheelIdleTimer = setTimeout(endWheelGesture, WHEEL_IDLE_MS);
     return;
   }
 
+  // 縦ホイール（マウス）: 一定量ごとに1ページ
   e.preventDefault();
-  if (pageSwipeActive || pageSwipeLock || pageSwipePageTaken) return;
+  if (pageSwipeActive || pageSwipeLock) return;
   wheelAccum += e.deltaY;
   if (Math.abs(wheelAccum) > 60) {
     go(wheelAccum > 0 ? 1 : -1);
@@ -5038,7 +5237,43 @@ function onWheel(e) {
 }
 
 /**
- * タッチ横スワイプ。1ドラッグ=1ページ。指を離してから次。
+ * 送る間隔が詰まりすぎたぶんを予約する。入力は捨てない。
+ * @param {1|-1} dir
+ * @param {number} delay ms
+ */
+function queueWheelPage(dir, delay) {
+  wheelQueue = Math.max(-3, Math.min(3, wheelQueue + dir));
+  if (wheelQueueTimer) return;
+  wheelQueueTimer = setTimeout(function drain() {
+    wheelQueueTimer = 0;
+    if (!wheelQueue) return;
+    const d = /** @type {1|-1} */ (wheelQueue > 0 ? 1 : -1);
+    wheelQueue -= d;
+    if (pageSwipeLock) settleSwipeNow();
+    pageSwipeTaken = false;
+    pageSwipeTx = 0;
+    // イベントの timeStamp と同じ時間軸で進める
+    wheelLastCommitT += WHEEL_MIN_PAGE_MS;
+    swipeLog(`queued ${d > 0 ? '次' : '前'}`);
+    if (clampPage(state.pageIndex + d) !== state.pageIndex) commitSwipe(d);
+    else wheelQueue = 0;
+    if (wheelQueue) wheelQueueTimer = setTimeout(drain, WHEEL_MIN_PAGE_MS);
+  }, Math.max(10, delay));
+}
+
+/** 横スクロールが途切れた＝1ジェスチャー終了 */
+function endWheelGesture() {
+  wheelIdleTimer = 0;
+  if (!pageSwipeTaken && !pageSwipeLock) onSwipeRelease(0);
+  pageSwipeTaken = false;
+  wheelLastT = 0;
+  wheelLastDir = 0;
+  wheelPrevAbs = 0;
+  wheelEnded = false;
+}
+
+/**
+ * タッチ／ペンの横スワイプ。1フリック＝1ページ。着地を待たずに次を受け付ける。
  * @param {HTMLElement} el #pageWrap
  */
 function installSwipe(el) {
@@ -5046,41 +5281,52 @@ function installSwipe(el) {
   let pointerId = null;
   let x0 = 0;
   let y0 = 0;
-  let baseTx = 0;
   let axisLocked = /** @type {null|'h'|'v'} */ (null);
+  let lastX = 0;
+  let lastT = 0;
+  let t0 = 0;
+  let velocity = 0;
+
+  /** 進行中のドラッグを終わらせる（確定はしない） */
+  const dropGesture = () => {
+    pointerId = null;
+    axisLocked = null;
+    velocity = 0;
+  };
 
   const onDown = (e) => {
     if (!state.pages.length) return;
     if (e.pointerType === 'mouse') return;
-    if (pointerId != null) return;
-    if (pageSwipeLock) return;
-    // 新しいドラッグ = 新しい1ページ枠
-    pageSwipePageTaken = false;
-    if (pageSwipeIdleTimer) {
-      clearTimeout(pageSwipeIdleTimer);
-      pageSwipeIdleTimer = 0;
+    // 前の指がまだ残っていても、新しい指は必ず拾う。
+    // 連続スワイプでは pointerup が届く前に次の指が触れる。
+    if (pointerId != null && pointerId !== e.pointerId) {
+      if (!pageSwipeTaken && Math.abs(pageSwipeTx) > 1) onSwipeRelease(0);
+      dropGesture();
     }
+    // 着地アニメ中でも待たせない
+    swipeLog(`down id=${e.pointerId} ${e.pointerType}`);
+    beginSwipeGesture();
     pointerId = e.pointerId;
     x0 = e.clientX;
     y0 = e.clientY;
-    baseTx = 0;
-    pageSwipeTx = 0;
+    lastX = e.clientX;
+    lastT = e.timeStamp || performance.now();
+    t0 = lastT;
+    velocity = 0;
+    pageSwipeBase = 0;
     axisLocked = null;
-    pageSwipeActive = true;
-    try { el.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
   };
 
   const onMove = (e) => {
     if (pointerId == null || e.pointerId !== pointerId) return;
-    if (pageSwipeLock || pageSwipePageTaken) return;
     const dx = e.clientX - x0;
     const dy = e.clientY - y0;
     if (!axisLocked) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       axisLocked = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
       if (axisLocked === 'v') {
-        pointerId = null;
-        try { el.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+        // 縦スクロールに譲る
+        dropGesture();
         if (Math.abs(pageSwipeTx) > 2) springSwipeHome();
         else {
           pageSwipeActive = false;
@@ -5090,33 +5336,55 @@ function installSwipe(el) {
       }
     }
     if (axisLocked !== 'h') return;
-    e.preventDefault();
-    trackSwipeTx(baseTx + dx);
+    if (e.cancelable) e.preventDefault();
+    if (pageSwipeTaken) return; // 1スワイプ1ページ: 確定後は指を追わない
+
+    const t = e.timeStamp || performance.now();
+    const dt = t - lastT;
+    if (dt > 0) {
+      const inst = (e.clientX - lastX) / dt;
+      // 直近を重めに（速い短フリックは 2〜3 サンプルしか取れない）
+      velocity = velocity * 0.35 + inst * 0.65;
+      lastX = e.clientX;
+      lastT = t;
+    }
+    trackSwipeTx(pageSwipeBase + dx);
   };
 
   const onUp = (e) => {
-    if (pointerId == null || (e.pointerId != null && e.pointerId !== pointerId)) return;
-    pointerId = null;
-    axisLocked = null;
-    try {
-      if (e.pointerId != null) el.releasePointerCapture(e.pointerId);
-    } catch (_) { /* ignore */ }
-    onSwipeRelease();
-    // 指を離したら次のドラッグを受け付ける（quiet 中でも次タッチは onDown で解除）
-    if (!pageSwipeLock) pageSwipePageTaken = false;
+    if (pointerId == null) return;
+    if (e && e.pointerId != null && e.pointerId !== pointerId) return;
+    const now = (e && e.timeStamp) || performance.now();
+    const idle = now - lastT;
+    // ドラッグ全体の平均速度も見る（サンプルが少ない高速フリックの取りこぼし防止）
+    const span = lastT - t0;
+    const mean = span > 0 ? (lastX - x0) / span : 0;
+    const v = Math.abs(mean) > Math.abs(velocity) ? mean : velocity;
+    swipeLog(`up id=${e && e.pointerId} tx=${pageSwipeTx.toFixed(0)} v=${v.toFixed(2)}` +
+      `${pageSwipeTaken ? ' 済' : ''}`);
+    dropGesture();
+    // 指を離した瞬間に確定
+    onSwipeRelease(idle > 120 ? 0 : v);
   };
 
+  // pointer capture は使わない。
+  // iOS では capture の解放時に飛ぶ lostpointercapture が「次の指」の
+  // ジェスチャーを巻き添えで消してしまい、連続スワイプが効かなくなる。
+  // タッチは既定で暗黙キャプチャされるので capture は元々不要。
   el.addEventListener('pointerdown', onDown, { passive: true });
-  el.addEventListener('pointermove', onMove, { passive: false });
-  el.addEventListener('pointerup', onUp);
-  el.addEventListener('pointercancel', onUp);
-  el.addEventListener('lostpointercapture', () => {
+  // move / up / cancel は指が要素外へ出ても確実に受けるため window で拾う
+  // （pointermove は bubble するので el には付けない＝二重発火しない）
+  window.addEventListener('pointermove', onMove, { passive: false });
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', (e) => {
+    swipeLog(`cancel id=${e.pointerId}`);
+    onUp(e);
+  });
+  // タブが隠れる等で pointerup を取り逃したときの保険
+  window.addEventListener('blur', () => {
     if (pointerId == null) return;
-    pointerId = null;
-    if (!pageSwipeLock) {
-      onSwipeRelease();
-      pageSwipePageTaken = false;
-    }
+    dropGesture();
+    if (!pageSwipeLock && !pageSwipeTaken && Math.abs(pageSwipeTx) > 1) springSwipeHome();
   });
 }
 

@@ -171,8 +171,26 @@ main { flex: 1; display: flex; min-height: 0; }
   flex-wrap: nowrap;
   min-width: 0;
 }
+#controls .ctrl-row.page-jump { flex-wrap: wrap; justify-content: center; }
 #controls .ctrl-row.page-jump label { display: inline-flex; align-items: center; min-width: 0; }
-#controls #jumpInput { width: 2.6em; font-size: 11px; padding: 1px 2px; min-width: 0; }
+/* ページ番号は4桁まで欠けずに出す。数値スピナーは幅を食うので消す */
+#controls #jumpInput {
+  width: 4ch;
+  box-sizing: content-box;
+  font-size: 11px;
+  padding: 1px 2px;
+  min-width: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+#controls #jumpInput::-webkit-outer-spin-button,
+#controls #jumpInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#controls .page-total { font-variant-numeric: tabular-nums; white-space: nowrap; }
 #controls #progress { color: var(--accent); min-height: 1em; }
 #controls hr { width: 100%; border: none; border-top: 1px solid var(--border); margin: 1px 0; }
 #controls #progress:empty { display: none; }
@@ -279,13 +297,19 @@ main { flex: 1; display: flex; min-height: 0; }
   #controls .ctrl-row.page-jump {
     font-size: 9px;
     gap: 0;
+    /* 幅56pxでも4桁が欠けないよう、入りきらなければ「/総数」を次行へ折り返す */
+    flex-wrap: wrap;
+    justify-content: center;
+    line-height: 1.15;
   }
+  #controls .ctrl-row.page-jump label { width: 100%; }
   #controls #jumpInput {
-    width: 2.2em;
-    font-size: 9px;
-    padding: 0;
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 10px;
+    padding: 0 1px;
   }
-  #controls .page-total { font-size: 9px; }
+  #controls .page-total { font-size: 9px; width: 100%; text-align: center; }
   #controls .ctrl-row.checks {
     grid-template-columns: 1fr;
     gap: 0;
@@ -585,7 +609,10 @@ main { flex: 1; display: flex; min-height: 0; }
 #pageWrap {
   flex: 1; display: flex; align-items: center; justify-content: center;
   padding: 22px; overflow: hidden; outline: none;
+  /* 横は自前で捲る。iPad Safari の「戻る」スワイプにも横方向を渡さない */
   touch-action: pan-y;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: contain;
   position: relative;
 }
 /* 横スワイプ用ストリップ: 現在ページ + 隣ページを並べてスライド */
@@ -601,8 +628,8 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 #pageStrip.strip-live { transition: none !important; }
 #pageStrip.strip-anim {
-  /* overshoot しない ease-out */
-  transition: transform 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
+  /* overshoot しない ease-out。連打を妨げないよう短め（JS の SWIPE_ANIM_MS と揃える） */
+  transition: transform 0.15s cubic-bezier(0.22, 0.75, 0.3, 1);
 }
 .page-slot {
   position: absolute;
@@ -791,3 +818,21 @@ footer {
 footer .spacer { flex: 1; }
 #progress { color: var(--accent); }
 .hint { opacity: 0.7; }
+
+/* 診断モード（URL に #swipedebug を付けたときだけ生成される） */
+#swipeDebug {
+  position: fixed; right: 6px; bottom: 6px; z-index: 9999;
+  max-width: 46vw; max-height: 42vh; overflow: hidden;
+  background: rgba(0, 0, 0, 0.78); color: #7dffa0;
+  font: 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre; padding: 5px 7px; border-radius: 5px;
+  pointer-events: none; user-select: none;
+}
+
+#swipeRaw {
+  position: fixed; left: 6px; bottom: 6px; right: 6px; z-index: 9999;
+  background: rgba(0, 0, 0, 0.78); color: #ffd479;
+  font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 4px 6px; border-radius: 5px; word-break: break-all;
+  max-height: 22vh; overflow: hidden; user-select: text;
+}
