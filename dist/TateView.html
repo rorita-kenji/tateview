@@ -102,6 +102,13 @@ main { flex: 1; display: flex; min-height: 0; }
   width: 152px; flex: 0 0 auto; display: flex; flex-direction: column;
   background: var(--panel); border-right: 1px solid var(--border); min-height: 0;
 }
+
+/* iPad 等の狭い画面ではミニマップを半分に */
+@media (max-width: 1024px) {
+  #sidebar {
+    width: 76px;
+  }
+}
 /* 章/話記号バー（サムネの上・常時1行） */
 #markBar.mark-bar {
   flex: 0 0 auto;
