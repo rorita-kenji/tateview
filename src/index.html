@@ -4,15 +4,45 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>縦view</title>
-  <!-- iPad/iPhone: ホーム画面追加時に Safari のアドレスバー・タブを出さない -->
+  <!-- ホーム画面 / インストール PWA。standalone で URL 欄を出さない（iOS meta + manifest 共通） -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="縦view" />
   <meta name="theme-color" content="#f7f5ef" />
   <meta name="application-name" content="縦view" />
-  <!-- display:standalone（iOS 16.4+ のホーム画面 Web App 向け）。start_url は追加時の URL が使われる -->
-  <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22%E7%B8%A6view%22%2C%22short_name%22%3A%22%E7%B8%A6view%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f7f5ef%22%2C%22theme_color%22%3A%22%23f7f5ef%22%7D" />
+  <!-- icons: https 配布時は同階層 icons/。file:// 単体では 404 でも壊れない -->
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png" />
+  <!-- manifest: https では実ファイル（icons 付き）。file:// 単体では data URL フォールバック。PC/iOS 分岐なし -->
+  <script>
+    (function () {
+      var http = location.protocol === 'http:' || location.protocol === 'https:';
+      var link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = http
+        ? new URL('manifest.webmanifest', location.href).href
+        : 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify({
+            name: '縦view',
+            short_name: '縦view',
+            display: 'standalone',
+            background_color: '#f7f5ef',
+            theme_color: '#f7f5ef',
+            start_url: '.'
+          }));
+      document.head.appendChild(link);
+      // Service Worker: https / localhost のみ。network-first・版チェック UI なし
+      if (http && 'serviceWorker' in navigator) {
+        var secure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        if (secure) {
+          navigator.serviceWorker.register(new URL('sw.js', location.href), {
+            scope: new URL('./', location.href).href
+          }).catch(function () { /* 登録失敗は黙って通常動作 */ });
+        }
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="./styles.css" />
   <!-- Google tag (gtag.js) — https のみ（file://・http ローカルでは読み込まない） -->
   <script>
@@ -56,20 +86,49 @@
   <div id="toast"></div>
   <div id="dropHint">ここにテキストファイルをドロップ</div>
 
+  <!-- 見出し設定（novedit 型・Lv1/Lv2 のみ。強調なし） -->
+  <div id="overlayHead" class="overlay" hidden>
+    <div class="dialog head-dialog" role="dialog" aria-labelledby="headDlgTitle">
+      <h2 id="headDlgTitle">見出し設定</h2>
+      <p class="dlg-lead">行頭の記号・キーワードで章（<b class="lv1">Lv1</b>）／話（<b class="lv2">Lv2</b>）を検出し色付けします。行頭の半角／全角スペース・タブは無視します。</p>
+
+      <h3>組み込みルール</h3>
+      <div id="cfgBuiltin" class="cfg-builtin"></div>
+
+      <h3>見出し記号（空白区切り）</h3>
+      <div class="fld sym-row" id="fldLv1">
+        <label class="lv-on"><input type="checkbox" id="cfgLv1On" checked />
+          <span><span class="sw lv1"></span><b class="lv1">Lv1</b> 章</span></label>
+        <input type="text" id="cfgLv1" spellcheck="false" autocomplete="off" aria-label="レベル1の記号"
+               placeholder="例: # ＃ §" />
+      </div>
+      <div class="fld sym-row" id="fldLv2">
+        <label class="lv-on"><input type="checkbox" id="cfgLv2On" checked />
+          <span><span class="sw lv2"></span><b class="lv2">Lv2</b> 話</span></label>
+        <input type="text" id="cfgLv2" spellcheck="false" autocomplete="off" aria-label="レベル2の記号"
+               placeholder="例: ▼ ▽ ■ □ ● 〇 ○ ## ＃＃" />
+        <p class="hint">長い記号が優先（<code>##</code>＝Lv2、<code>#</code>＝Lv1）。novedit 既定と同じ</p>
+      </div>
+
+      <p id="cfgPreview" class="cfg-preview">—</p>
+
+      <div class="dlg-row">
+        <button type="button" id="cfgReset">既定に戻す</button>
+        <span class="dlg-spacer"></span>
+        <button type="button" id="cfgCancel">キャンセル</button>
+        <button type="button" id="cfgApply" class="primary">適用</button>
+      </div>
+    </div>
+  </div>
+
   <main>
     <div id="sidebar">
-      <!-- 章/話記号: サムネ有無に関わらず常時表示（1行） -->
-      <div id="markBar" class="mark-bar" title="行頭（半角/全角スペースのみ可）の見出し記号">
-        <label class="mark-ch"><span class="mark-lbl">章</span><input id="chapterMark" type="text" value="#" maxlength="16" spellcheck="false" autocomplete="off" title="章記号" /></label>
-        <label class="mark-ep"><span class="mark-lbl">話</span><input id="episodeMark" type="text" value="##" maxlength="16" spellcheck="false" autocomplete="off" title="話記号" /></label>
+      <div id="headBar" class="head-bar">
+        <button id="btnHeadCfg" type="button" class="primary" title="章・話の記号とキーワード（見出し検出）">見出し</button>
       </div>
       <div id="thumbs" title="全体ミニマップ — クリック／上下に撫でてページ移動"></div>
       <!-- 左メニュー: ページ移動 + 表示設定 -->
       <div id="controls">
-        <div class="ctrl-row nav">
-          <button id="nextBtn" title="次ページ">◀</button>
-          <button id="prevBtn" title="前ページ">▶</button>
-        </div>
         <div class="ctrl-row status page-jump">
           <label title="ページ番号"><input id="jumpInput" type="number" min="1" /></label>
           <span class="page-total">/<span id="totalPages">0</span></span>
@@ -95,13 +154,20 @@
           <select id="fontSize" title="字級"></select>
         </div>
         <div id="appCredit" class="app-credit">
-          <span>v1.2</span>
+          <span>v1.3</span>
           <span class="credit-by">by <a href="https://yamamori-yamori.github.io/mypage/" target="_blank" rel="noopener noreferrer">やまもりやもり</a></span>
         </div>
       </div>
     </div>
 
     <div id="pageWrap" tabindex="-1">
+      <!-- 左右余白／端帯クリックでページ送り（右綴じ: 左=次・右=前）。三角は大きめ -->
+      <button type="button" id="pageEdgeNext" class="page-edge page-edge-next" title="次ページ" aria-label="次ページ">
+        <span class="page-edge-tri" aria-hidden="true"></span>
+      </button>
+      <button type="button" id="pageEdgePrev" class="page-edge page-edge-prev" title="前ページ" aria-label="前ページ">
+        <span class="page-edge-tri" aria-hidden="true"></span>
+      </button>
       <div id="pageStrip">
         <div id="slotPeer" class="page-slot" hidden>
           <div id="pagePeer" class="page-sheet"></div>

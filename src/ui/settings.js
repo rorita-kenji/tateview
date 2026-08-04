@@ -28,24 +28,69 @@ export const DEFAULT_SETTINGS = {
   gridLines: false,
   fullwidthAlpha: true,
   fullwidthDigit: true,
-  /** 章見出しの行頭記号（既定 `#`） */
+  /** @deprecated 互換用。実体は headCfg */
   chapterMark: '#',
-  /** 話見出しの行頭記号（既定 `##`） */
+  /** @deprecated 互換用。実体は headCfg */
   episodeMark: '##',
+  /**
+   * 見出し設定（novedit 型・Lv1/Lv2 のみ）
+   * lv1/lv2 は空白区切りの複数記号可。builtin はキーワード検出 ON/OFF。
+   */
+  headCfg: {
+    // novedit HEAD_DEFAULT と一致
+    lv1: '# ＃ §',
+    lv2: '▼ ▽ ■ □ ● 〇 ○ ## ＃＃',
+    lv1On: true,
+    lv2On: true,
+    builtin: {
+      chapterNum: true,
+      chapterWord: true,
+      episodeNum: true,
+      episodeWord: true,
+    },
+  },
 };
+
+/** headCfg と旧 chapterMark/episodeMark を揃える */
+export function syncHeadingSettings(s) {
+  const base = s || { ...DEFAULT_SETTINGS };
+  const hcIn = base.headCfg && typeof base.headCfg === 'object' ? base.headCfg : null;
+  const headCfg = {
+    lv1: hcIn && hcIn.lv1 != null ? String(hcIn.lv1) : (base.chapterMark != null ? String(base.chapterMark) : '#'),
+    lv2: hcIn && hcIn.lv2 != null ? String(hcIn.lv2) : (base.episodeMark != null ? String(base.episodeMark) : '##'),
+    lv1On: !(hcIn && hcIn.lv1On === false),
+    lv2On: !(hcIn && hcIn.lv2On === false),
+    builtin: {
+      chapterNum: true,
+      chapterWord: true,
+      episodeNum: true,
+      episodeWord: true,
+      ...(hcIn && hcIn.builtin && typeof hcIn.builtin === 'object' ? hcIn.builtin : {}),
+    },
+  };
+  if (!String(headCfg.lv1).trim()) headCfg.lv1 = '# ＃ §';
+  if (!String(headCfg.lv2).trim()) headCfg.lv2 = '▼ ▽ ■ □ ● 〇 ○ ## ＃＃';
+  // 旧キーは先頭トークン（警告・検索の簡易パス用）
+  const t1 = String(headCfg.lv1).trim().split(/\s+/)[0] || '#';
+  const t2 = String(headCfg.lv2).trim().split(/\s+/)[0] || '▼';
+  base.headCfg = headCfg;
+  base.chapterMark = t1;
+  base.episodeMark = t2;
+  return base;
+}
 
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (!raw) return syncHeadingSettings({ ...DEFAULT_SETTINGS });
+    return syncHeadingSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return syncHeadingSettings({ ...DEFAULT_SETTINGS });
   }
 }
 export function saveSettings(s) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(syncHeadingSettings(s)));
   } catch {
     /* ignore */
   }

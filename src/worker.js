@@ -43,6 +43,7 @@ self.onmessage = (e) => {
         enabled: payload.enabled ? new Set(payload.enabled) : null,
         chapterMark: payload.chapterMark,
         episodeMark: payload.episodeMark,
+        headCfg: payload.headCfg,
       });
       post({ documentId, requestId, type: 'warnings', payload: { items, total } });
       return;
@@ -54,6 +55,7 @@ self.onmessage = (e) => {
         headingOnly: payload.headingOnly,
         chapterMark: payload.chapterMark,
         episodeMark: payload.episodeMark,
+        headCfg: payload.headCfg,
       });
       post({ documentId, requestId, type: 'searchResult', payload: { matches, total } });
       return;

@@ -1,10 +1,28 @@
 # 縦view（TateView）— 縦書き小説ビューア
 
-バージョン **v1.2**。配布ファイル名は `TateView.html`。  
+バージョン **v1.3**。配布ファイル名は `TateView.html`。  
 作者: [やまもりやもり](https://yamamori-yamori.github.io/mypage/)
 
 公募・投稿前の小説原稿を、縦書きで組版確認・校正するためのビューア。  
-テキストファイル（.txt）を開くだけで、原稿用紙のような縦書きレイアウトと、公募向けの文章チェックが行える。**単一HTMLファイルで動作し、インストール不要・オフライン利用可**（`https` 配信時のみ Google Analytics を読み込む。`file://` / `http` では GA なし）。
+テキストファイル（.txt）を開くだけで、原稿用紙のような縦書きレイアウトと、公募向けの文章チェックが行える。**単一HTMLファイルで動作し、インストール不要**（`file://` でも閲覧完動）。`https` 配信時のみ Google Analytics を読み込む（`file://` / `http` では GA なし）。
+
+### PWA（v1.3 / novedit と同型）
+
+https 配布では同階層に次を置く（`node build.js` が `dist/` へコピー）:
+
+| ファイル | 役割 |
+| --- | --- |
+| `TateView.html` | 本体（単一 HTML） |
+| `manifest.webmanifest` | `display:standalone`・icons・`file_handlers`（.txt/.text/.md） |
+| `sw.js` | **network-first** shell キャッシュ（版チェック UI なし） |
+| `icons/` | 192 / 512 / apple-touch-icon |
+
+- **PC Chrome**: インストール可能。standalone で URL 欄なし。OS から .txt 起動は `launchQueue`（第1ファイルを開く・FSA handle 付き）
+- **iOS**: ホーム画面追加で standalone。一度 https で開いたあとオフライン再起動可（SW キャッシュ）
+- **更新**: オンライン時は常にネット優先で shell を取り直し、成功時にキャッシュ更新（cache-first にしない）
+- **file://**: SW 非登録・data URL の最小 manifest。HTML 単体で従来どおり動く
+- キャッシュ名 `tateview-shell-vN`（`sw.js` 更新時に N を上げる）
+- mypage 取り込み: `publish-web.sh tateview` が manifest / sw / icons もコピー
 
 ---
 

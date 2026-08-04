@@ -1,11 +1,11 @@
 // main.js — メインスレッドの統括
 import { pageIndexOfOffset } from './modules/paginator.js';
-import { headingLevel, headingTitle, resolveHeadingMarks } from './modules/heading.js';
+import { headingLevel, headingTitle, countHeadings, BUILTIN_HEADINGS, BUILTIN_HEADING_ORDER, DEFAULT_HEAD_CFG, normalizeHeadCfg } from './modules/heading.js';
 import { WARNING_LABELS } from './modules/warnings.js';
 import { firstMatchIndexFrom, searchInRange } from './modules/search.js';
 import { renderPage } from './ui/renderer.js';
 import {
-  PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition,
+  PRESETS, DEFAULT_SETTINGS, loadSettings, saveSettings, savePosition, loadPosition, syncHeadingSettings,
 } from './ui/settings.js';
 
 const $ = (id) => document.getElementById(id);
@@ -49,6 +49,7 @@ function init() {
     populateFontSizes();
     renderCurrent();
     if (state.pages.length) refreshThumbLayout();
+    updatePageEdges();
   });
   window.addEventListener('keydown', onKey);
   bindThumbScrub();
@@ -57,13 +58,53 @@ function init() {
   // 未読状態のとき、原稿表示領域のクリックでファイル選択ダイアログを開く
   wrap.addEventListener('click', (e) => {
     if (!state.text && state.fileName === 'untitled.txt') {
+      // 端ボタンは未使用（empty で非表示）だが念のため除外
+      if (e.target.closest && e.target.closest('.page-edge')) return;
       e.preventDefault();
       $('fileInput').click();
     }
   });
+  // 左右帯: 帯のどこを押してもページ送り（右綴じ 左=次 / 右=前）
+  const edgeNext = $('pageEdgeNext');
+  const edgePrev = $('pageEdgePrev');
+  if (edgeNext) {
+    edgeNext.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      go(1);
+    });
+  }
+  if (edgePrev) {
+    edgePrev.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      go(-1);
+    });
+  }
   installSwipe(wrap);
   installDragAndDrop();
+  installLaunchQueue();
   startFileWatch();
+}
+
+/* ---------------- PWA File Handling (launchQueue) ---------------- */
+/** OS / インストール PWA から .txt 等で起動されたとき第1ファイルを開く */
+function installLaunchQueue() {
+  try {
+    if (!('launchQueue' in window) || typeof window.launchQueue.setConsumer !== 'function') return;
+    window.launchQueue.setConsumer(async (params) => {
+      try {
+        const handles = params && params.files ? params.files : [];
+        if (!handles.length) return;
+        const handle = handles[0];
+        const file = await handle.getFile();
+        await openFile(file, handle, { keepPosition: false });
+        showToast('「' + (file.name || 'ファイル') + '」を開きました', 1800);
+      } catch {
+        showToast('起動ファイルを開けませんでした');
+      }
+    });
+  } catch { /* 非対応環境 */ }
 }
 
 /* ---------------- Drag & Drop ---------------- */
@@ -195,6 +236,7 @@ function requestWarnings() {
     enabled: [...enabled],
     chapterMark: s.chapterMark,
     episodeMark: s.episodeMark,
+    headCfg: s.headCfg,
   });
 }
 
@@ -260,6 +302,7 @@ function renderCurrent() {
     if (peer) peer.textContent = '';
     resetPageStrip(true);
     updateStatus();
+    updatePageEdges();
     return;
   }
   // スワイプ確定アニメ中は中身を触らない（ストリップが隣ページを見せている）
@@ -271,15 +314,14 @@ function renderCurrent() {
     resetPageStrip(true);
   }
   paintPageSheet(pageEl, state.pageIndex, { highlights: true });
-  // fit scale
-  const wrap = $('pageWrap');
-  const availW = wrap.clientWidth - 44;
-  const availH = wrap.clientHeight - 44;
+  // fit scale — 本文優先（左右ナビ帯は確保しない）
+  const { w: availW, h: availH } = contentAvailSize();
   const ext = measureExtent(pageEl);
   let scale = 1;
   if (ext && ext.w > 0 && ext.h > 0) {
     scale = Math.min(1, availW / ext.w, availH / ext.h);
   }
+  if (scale > 0.995) scale = 1;
   pageFitScale = scale;
   applySheetScale(pageEl);
   if (pageSwipeActive && pageSwipePeerDir) {
@@ -288,7 +330,69 @@ function renderCurrent() {
     applyStripTransform({ live: true });
   }
   updateStatus();
+  updatePageEdges();
   persistPosition();
+}
+
+/** 左右ページ送り帯の実効幅（px） */
+function pageEdgeBandWidth(wrap) {
+  const el = $('pageEdgeNext') || (wrap && wrap.querySelector('.page-edge'));
+  if (el && el.offsetWidth) return el.offsetWidth;
+  // fallback ≈ CSS clamp(44px, 9vw, 72px)
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 800;
+  return Math.max(44, Math.min(72, Math.round(vw * 0.09)));
+}
+
+/**
+ * 本文左右の余白有無で edge 見た目を切替 + 端ページで disabled
+ * 余白あり → edges-roomy（塗り三角）
+ * 本文と帯が重なる → edges-tight（枠線のみ透明三角）※本文優先
+ */
+function updatePageEdges() {
+  const wrap = $('pageWrap');
+  const next = $('pageEdgeNext');
+  const prev = $('pageEdgePrev');
+  if (!wrap || !next || !prev) return;
+
+  const empty = !state.pages.length || wrap.classList.contains('empty');
+  next.hidden = empty;
+  prev.hidden = empty;
+  if (empty) {
+    wrap.classList.remove('edges-tight', 'edges-roomy');
+    return;
+  }
+
+  const pageEl = $('page');
+  const edgeW = pageEdgeBandWidth(wrap);
+  let room = 0;
+  if (pageEl) {
+    const wr = wrap.getBoundingClientRect();
+    const pr = pageEl.getBoundingClientRect();
+    const leftGap = pr.left - wr.left;
+    const rightGap = wr.right - pr.right;
+    room = Math.min(leftGap, rightGap);
+  }
+  // 三角本体より十分な余白があるときだけ塗り。足りなければ枠線透明
+  const triNeed = Math.min(36, edgeW * 0.55);
+  const roomy = room >= triNeed;
+  wrap.classList.toggle('edges-roomy', roomy);
+  wrap.classList.toggle('edges-tight', !roomy);
+
+  const i = state.pageIndex;
+  const last = state.pages.length - 1;
+  next.disabled = i >= last;
+  prev.disabled = i <= 0;
+}
+
+/** 本文表示に使える実効サイズ（本文優先: 左右ナビ帯は引かない） */
+function contentAvailSize() {
+  const wrap = $('pageWrap');
+  if (!wrap) return { w: 40, h: 40 };
+  // 上下 padding 22×2 のみ。左右はナビより本文を優先（重なり時は枠線三角）
+  return {
+    w: Math.max(40, wrap.clientWidth - 4),
+    h: Math.max(40, wrap.clientHeight - 44),
+  };
 }
 
 /**
@@ -343,15 +447,26 @@ function effectiveFontSize() {
 }
 
 // 全列の実描画範囲（幅・高さ）を測る。overflow で見切れても正しい寸法が取れる。
+// ★ transform:scale が掛かっていると getBoundingClientRect が縮小後になり、
+//   次フレームで scale=1 → また縮小…と字級／scale が振動するので、計測中は必ず外す。
 function measureExtent(pageEl) {
+  if (!pageEl) return null;
   const cols = pageEl.querySelectorAll('.col');
   if (!cols.length) return null;
+  const prevTx = pageEl.style.transform;
+  const prevWill = pageEl.style.willChange;
+  pageEl.style.transform = 'none';
+  pageEl.style.willChange = 'auto';
+  // レイアウト確定（transform 解除を反映）
+  void pageEl.offsetWidth;
   let l = Infinity, r = -Infinity, t = Infinity, b = -Infinity;
   cols.forEach((c) => {
     const q = c.getBoundingClientRect();
     l = Math.min(l, q.left); r = Math.max(r, q.right);
     t = Math.min(t, q.top); b = Math.max(b, q.bottom);
   });
+  pageEl.style.transform = prevTx;
+  pageEl.style.willChange = prevWill;
   return { w: r - l, h: b - t };
 }
 
@@ -399,7 +514,7 @@ function buildRulers(pageEl, cell) {
 function markHeadings(pageEl, page) {
   // 見出し行（LF行）: 行頭〜マーカー前が半角/全角スペースのみなら色クラス。
   // 改行で本文に戻る。
-  const marks = resolveHeadingMarks(state.settings);
+  const marks = state.settings;
   const cols = pageEl.querySelectorAll('.col');
   page.columns.forEach((c, i) => {
     if (!cols[i]) return;
@@ -423,10 +538,12 @@ function lineTextAt(text, offset) {
 // 1文字ぶんの実寸をプローブ測定し、指定の字数×行数が収まる最大字級を理論計算する。
 // 推定係数に頼らないので、指定した行数が必ず表示される。
 const FONT_SIZE_MAX_CAP = 120;
+/** 直近の maxFit 結果（リサイズ振動のヒステリシス用） */
+let _lastMaxFitFs = 0;
 function maxFitFontSize() {
   const wrap = $('pageWrap');
-  const availH = Math.max(40, wrap.clientHeight - 44);
-  const availW = Math.max(40, wrap.clientWidth - 44);
+  if (!wrap) return state.settings.fontSize || 20;
+  const { w: availW, h: availH } = contentAvailSize();
   const s = state.settings;
   const PROBE_FS = 100;
 
@@ -436,20 +553,33 @@ function maxFitFontSize() {
   probe.textContent = 'あ'.repeat(Math.max(1, s.charsPerColumn));
   wrap.appendChild(probe);
   const rect = probe.getBoundingClientRect();
+  const pageElForGap = $('page');
+  const pageCs = getComputedStyle(pageElForGap || probe);
+  const gap = parseFloat(pageCs.gap || pageCs.columnGap) || 0;
   wrap.removeChild(probe);
 
   const colH100 = rect.height;   // charsPerColumn 文字ぶんの列の長さ（fs=100）
   const colW100 = rect.width;    // 1列の幅（fs=100）
   if (!colH100 || !colW100) return s.fontSize || 20;
 
-  // #page は flex の gap（columnGap ではない）
-  const pageCs = getComputedStyle($('page'));
-  const gap = parseFloat(pageCs.gap || pageCs.columnGap) || 0;
+  // gap は --fs 連動の em のことがある。computed gap は現在の --fs 基準 px → fs=100 へ比例換算
+  // W = n * colW100 * (fs/100) + (n-1) * gapAt100 * (fs/100)
+  const curFs = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fs')) || s.fontSize || 20;
+  const gapAt100 = curFs > 0 ? (gap * PROBE_FS) / curFs : gap;
+  const n = s.columnsPerPage;
   const fsByH = (availH * PROBE_FS) / colH100;
-  const fsByW = ((availW - (s.columnsPerPage - 1) * gap) * PROBE_FS) / (s.columnsPerPage * colW100);
+  const widthDenom = n * colW100 + (n - 1) * gapAt100;
+  const fsByW = widthDenom > 0 ? (availW * PROBE_FS) / widthDenom : fsByH;
   // 余白を少し見て安全側へ（はみ出し scale に頼る前にほぼ最大）
-  const fit = Math.floor(Math.min(fsByH, fsByW) * 0.98);
-  return Math.max(8, Math.min(FONT_SIZE_MAX_CAP, fit));
+  let fit = Math.floor(Math.min(fsByH, fsByW) * 0.98);
+  fit = Math.max(8, Math.min(FONT_SIZE_MAX_CAP, fit));
+  // ヒステリシス: ±1px の往復振動を止める（リサイズ中の端数ゆらぎ対策）
+  if (_lastMaxFitFs > 0 && Math.abs(fit - _lastMaxFitFs) <= 1) {
+    fit = _lastMaxFitFs;
+  } else {
+    _lastMaxFitFs = fit;
+  }
+  return fit;
 }
 
 // 字級セレクトを「表示可能なサイズ」だけで再構築する。
@@ -659,7 +789,7 @@ function focusPageForKeys() {
  * @returns {{ level: 1|2, text: string, charLen: number }[]}
  */
 function headingsInPage(p) {
-  const marks = resolveHeadingMarks(state.settings);
+  const marks = state.settings;
   const seg = state.text.slice(p.range.start, p.range.end);
   const out = [];
   for (const line of seg.split('\n')) {
@@ -1250,18 +1380,18 @@ function settleCurrentPage(pageEl, strip) {
     const el = pageEl || $('page');
     if (!el) return;
     paintPageSheet(el, state.pageIndex, { highlights: true });
-    const wrap = $('pageWrap');
-    if (!wrap) return;
-    const availW = wrap.clientWidth - 44;
-    const availH = wrap.clientHeight - 44;
+    const { w: availW, h: availH } = contentAvailSize();
     const ext = measureExtent(el);
     if (ext && ext.w > 0 && ext.h > 0) {
-      pageFitScale = Math.min(1, availW / ext.w, availH / ext.h);
+      let scale = Math.min(1, availW / ext.w, availH / ext.h);
+      if (scale > 0.995) scale = 1;
+      pageFitScale = scale;
     }
     applySheetScale(el);
     const st = strip || $('pageStrip');
     if (st) st.style.transition = '';
     updateStatus();
+    updatePageEdges();
     schedulePersist();
   }, SETTLE_QUIET_MS);
 }
@@ -1784,6 +1914,7 @@ function doSearch() {
     headingOnly: false,
     chapterMark: state.settings.chapterMark,
     episodeMark: state.settings.episodeMark,
+    headCfg: state.settings.headCfg,
   });
 }
 /** 前/次: ヒットがあるページ単位で移動（同一ページ内の一致はまとめて1ステップ） */
@@ -1887,8 +2018,6 @@ function reflectSettingsToUI() {
   $('fontSelect').value = s.fontFamily;
   $('fontSize').value = s.fontSize;
   $('burasage').disabled = !s.kinsoku;
-  $('chapterMark').value = s.chapterMark != null ? s.chapterMark : '#';
-  $('episodeMark').value = s.episodeMark != null ? s.episodeMark : '##';
 }
 function applyAppearance() {
   const s = state.settings;
@@ -1896,6 +2025,109 @@ function applyAppearance() {
   document.documentElement.dataset.font = s.fontFamily;
 }
 function persist() { saveSettings(state.settings); }
+
+/* ---------------- 見出し設定ダイアログ ---------------- */
+function ensureBuiltinChecks() {
+  const box = $('cfgBuiltin');
+  if (!box || box.dataset.ready === '1') return;
+  box.dataset.ready = '1';
+  for (const k of BUILTIN_HEADING_ORDER) {
+    const b = BUILTIN_HEADINGS[k];
+    const lab = document.createElement('label');
+    lab.className = 'ck';
+    const col = b.level === 1 ? 'var(--heading1)' : 'var(--heading2)';
+    lab.innerHTML =
+      '<input type="checkbox" data-b="' + k + '" />' +
+      '<span><b style="color:' + col + '">Lv' + b.level + '</b> ' + b.label + '</span>';
+    box.appendChild(lab);
+  }
+}
+function syncLvFld(onId, fldId) {
+  const on = $(onId).checked;
+  $(fldId).classList.toggle('is-off', !on);
+  const inp = $(fldId).querySelector('input[type="text"]');
+  if (inp) inp.disabled = !on;
+}
+function cfgFromDialog() {
+  const builtin = {};
+  $('cfgBuiltin').querySelectorAll('input[data-b]').forEach((i) => {
+    builtin[i.dataset.b] = i.checked;
+  });
+  return {
+    lv1: $('cfgLv1').value,
+    lv2: $('cfgLv2').value,
+    lv1On: $('cfgLv1On').checked,
+    lv2On: $('cfgLv2On').checked,
+    builtin,
+  };
+}
+function cfgToDialog(cfg) {
+  ensureBuiltinChecks();
+  const c = normalizeHeadCfg({ headCfg: cfg || DEFAULT_HEAD_CFG });
+  $('cfgBuiltin').querySelectorAll('input[data-b]').forEach((i) => {
+    i.checked = c.builtin[i.dataset.b] !== false;
+  });
+  $('cfgLv1').value = c.lv1 || '';
+  $('cfgLv2').value = c.lv2 || '';
+  $('cfgLv1On').checked = c.lv1On !== false;
+  $('cfgLv2On').checked = c.lv2On !== false;
+  syncLvFld('cfgLv1On', 'fldLv1');
+  syncLvFld('cfgLv2On', 'fldLv2');
+  cfgPreview();
+}
+function cfgPreview() {
+  const cfg = cfgFromDialog();
+  const { lv1, lv2 } = countHeadings(state.text || '', { headCfg: cfg });
+  $('cfgPreview').textContent = '現状：Lv1（章） ' + lv1 + ' / Lv2（話） ' + lv2;
+}
+function openHeadCfg() {
+  ensureBuiltinChecks();
+  const hc = state.settings.headCfg || DEFAULT_HEAD_CFG;
+  cfgToDialog(hc);
+  const ov = $('overlayHead');
+  ov.hidden = false;
+  ov.removeAttribute('hidden');
+}
+function closeHeadCfg() {
+  const ov = $('overlayHead');
+  ov.hidden = true;
+  ov.setAttribute('hidden', '');
+}
+function applyHeadCfg() {
+  const cfg = cfgFromDialog();
+  state.settings.headCfg = cfg;
+  syncHeadingSettings(state.settings);
+  persist();
+  renderCurrent();
+  if (state.pages.length) buildThumbnails();
+  if (state.text) requestWarnings();
+  closeHeadCfg();
+  const n = countHeadings(state.text || '', state.settings);
+  showToast('見出し設定を適用（Lv1 ' + n.lv1 + ' / Lv2 ' + n.lv2 + '）', 1600);
+}
+function bindHeadCfgUI() {
+  ensureBuiltinChecks();
+  $('btnHeadCfg').addEventListener('click', openHeadCfg);
+  $('cfgLv1').addEventListener('input', cfgPreview);
+  $('cfgLv2').addEventListener('input', cfgPreview);
+  $('cfgLv1On').addEventListener('change', () => { syncLvFld('cfgLv1On', 'fldLv1'); cfgPreview(); });
+  $('cfgLv2On').addEventListener('change', () => { syncLvFld('cfgLv2On', 'fldLv2'); cfgPreview(); });
+  $('cfgBuiltin').addEventListener('change', cfgPreview);
+  $('cfgReset').addEventListener('click', () => {
+    cfgToDialog(JSON.parse(JSON.stringify(DEFAULT_HEAD_CFG)));
+  });
+  $('cfgCancel').addEventListener('click', closeHeadCfg);
+  $('cfgApply').addEventListener('click', applyHeadCfg);
+  $('overlayHead').addEventListener('click', (e) => {
+    if (e.target === $('overlayHead')) closeHeadCfg();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('overlayHead').hidden) {
+      e.preventDefault();
+      closeHeadCfg();
+    }
+  });
+}
 
 function bindUI() {
   $('fileInput').addEventListener('change', (e) => {
@@ -1983,8 +2215,7 @@ function bindUI() {
     renderCurrent();
   });
 
-  $('prevBtn').addEventListener('click', () => go(-1));
-  $('nextBtn').addEventListener('click', () => go(1));
+  // ページ送りは #pageEdgeNext / #pageEdgePrev（本文左右帯）— サイドバーの ◀▶ は廃止
   $('jumpInput').addEventListener('change', (e) => gotoPage((+e.target.value || 1) - 1));
 
   $('searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
@@ -2007,23 +2238,7 @@ function bindUI() {
 
   $('togglePanel').addEventListener('click', () => document.body.classList.toggle('panel-open'));
 
-  const onHeadingMarkChange = () => {
-    let chapter = String($('chapterMark').value ?? '');
-    let episode = String($('episodeMark').value ?? '');
-    // 空欄は既定に戻す
-    if (!chapter) chapter = '#';
-    if (!episode) episode = '##';
-    state.settings.chapterMark = chapter;
-    state.settings.episodeMark = episode;
-    $('chapterMark').value = chapter;
-    $('episodeMark').value = episode;
-    persist();
-    renderCurrent();
-    if (state.pages.length) buildThumbnails();
-    if (state.text) requestWarnings();
-  };
-  $('chapterMark').addEventListener('change', onHeadingMarkChange);
-  $('episodeMark').addEventListener('change', onHeadingMarkChange);
+  bindHeadCfgUI();
 }
 
 function clampInt(v, lo, hi, def) {

@@ -1,12 +1,13 @@
 // build.js — src を単一HTML dist/viewer.html に結合（Node標準モジュールのみ）。
 // main/worker の2バンドルを明示的に構成する。
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync, existsSync, cpSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = join(__dirname, 'src');
-const DIST = join(__dirname, 'dist', 'TateView.html');
+const DIST_DIR = join(__dirname, 'dist');
+const DIST = join(DIST_DIR, 'TateView.html');
 
 // 依存順の登録リスト（キーは basename）
 const ENGINE = ['modules/normalize', 'modules/encoding', 'modules/kinsoku', 'modules/tokenizer',
@@ -73,15 +74,49 @@ html = html.slice(0, devIdx) +
   `  return new Worker(URL.createObjectURL(new Blob([s], { type: 'text/javascript' })));\n};\n` +
   `${mainSource}\n</script>\n</body>\n</html>\n`;
 
+mkdirSync(DIST_DIR, { recursive: true });
 writeFileSync(DIST, html, 'utf8');
+
+// --- PWA 同梱（https 配布用。file:// 単体 HTML は従来どおり完動）---
+function copyPwaAssets() {
+  const root = __dirname;
+  for (const name of ['manifest.webmanifest', 'sw.js']) {
+    const from = join(root, name);
+    if (!existsSync(from)) throw new Error('PWA asset missing: ' + name);
+    copyFileSync(from, join(DIST_DIR, name));
+  }
+  const iconsFrom = join(root, 'icons');
+  const iconsTo = join(DIST_DIR, 'icons');
+  if (!existsSync(iconsFrom)) throw new Error('PWA icons/ missing');
+  mkdirSync(iconsTo, { recursive: true });
+  if (typeof cpSync === 'function') {
+    cpSync(iconsFrom, iconsTo, { recursive: true });
+  } else {
+    for (const f of ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']) {
+      copyFileSync(join(iconsFrom, f), join(iconsTo, f));
+    }
+  }
+}
+copyPwaAssets();
 
 // --- ビルド検証 ---
 const errors = [];
 const scriptBundles = workerSource + '\n' + mainSource;
 if (/^\s*import\s+/m.test(scriptBundles)) errors.push('未変換の import 文が残存');
 if (/^\s*export\s+/m.test(scriptBundles)) errors.push('未変換の export 文が残存');
-if (/<script[^>]+src=/.test(html)) errors.push('外部 script 参照が残存');
+// 動的 gtag のみ許容。静的 <script src=...> は禁止（ビルド成果物の外部依存）
+if (/<script[^>]+src\s*=/.test(html.replace(/if \(location\.protocol === 'https:'\)[\s\S]*?gtag\('config'[\s\S]*?\n\s*\}/, ''))) {
+  // gtag ブロックを除いても script src が残るなら NG
+  const withoutGtag = html.replace(
+    /<!-- Google tag[\s\S]*?<\/script>\s*/m,
+    ''
+  );
+  if (/<script[^>]+src\s*=/.test(withoutGtag)) errors.push('外部 script 参照が残存');
+}
 if (/<link[^>]+stylesheet/.test(html)) errors.push('外部 stylesheet 参照が残存');
+if (!existsSync(join(DIST_DIR, 'sw.js'))) errors.push('dist/sw.js 未出力');
+if (!existsSync(join(DIST_DIR, 'manifest.webmanifest'))) errors.push('dist/manifest.webmanifest 未出力');
+if (!existsSync(join(DIST_DIR, 'icons', 'icon-192.png'))) errors.push('dist/icons 未出力');
 
 if (errors.length) {
   console.error('BUILD FAILED:\n - ' + errors.join('\n - '));
@@ -91,3 +126,4 @@ console.log(`OK: ${DIST}`);
 console.log(`  worker bundle: ${workerSource.length} chars`);
 console.log(`  main bundle:   ${mainSource.length} chars`);
 console.log(`  html total:    ${html.length} chars`);
+console.log(`  pwa:           sw.js + manifest + icons → dist/`);

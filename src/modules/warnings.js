@@ -2,7 +2,7 @@
 // 位置は正規化テキスト上の UTF-16 半開区間 [start,end)。
 // 半角ラン単位で集約、見出しプレフィックス・ルビ内は半角警告から除外、severity 付き。
 
-import { collectHeadingPrefixRanges, isHeadingLine, resolveHeadingMarks } from './heading.js';
+import { collectHeadingPrefixRanges, isHeadingLine } from './heading.js';
 export const WARNING_LABELS = {
   'indent-missing': '字下げ漏れ',
   'dialog-indent': '会話文の不要な字下げ',
@@ -65,10 +65,13 @@ export function detectWarnings(text, opt = {}) {
   const enabled = opt.enabled || null;
   const limit = opt.limit || DEFAULT_LIMIT;
   const on = (code) => (enabled ? enabled.has(code) : true);
-  const headingMarks = resolveHeadingMarks(opt.headingMarks || opt);
+  // headCfg 優先（複数記号・組み込みキーワード）。旧 chapterMark のみでも可
+  const headSrc = opt.headCfg
+    ? { headCfg: opt.headCfg }
+    : (opt.headingMarks || opt);
 
   const rubyRanges = collectRubyRanges(text);
-  const headingPrefixRanges = collectHeadingPrefixRanges(text, headingMarks);
+  const headingPrefixRanges = collectHeadingPrefixRanges(text, headSrc);
   const excluded = (pos) =>
     inAny(rubyRanges, pos) || inAny(headingPrefixRanges, pos);
 
@@ -98,7 +101,7 @@ export function detectWarnings(text, opt = {}) {
     const start = lineStart;
     lineStart += line.length + 1; // +1 は \n
 
-    const isHeading = isHeadingLine(line, headingMarks);
+    const isHeading = isHeadingLine(line, headSrc);
 
     if (on('fullspace-only-line') && line.length > 0 && /^　+$/.test(line)) {
       add('fullspace-only-line', start, start + line.length);

@@ -228,6 +228,20 @@ test('heading: ## を # より優先（話）', () => {
   assert.equal(matchHeadingPrefix('# 章', { chapter: '#', episode: '##' }).prefixLen, 2);
   assert.ok(isHeadingLine('\u3010\u8a71\u3011\u30bf\u30a4\u30c8\u30eb', { chapter: '\u3010\u7ae0\u3011', episode: '\u3010\u8a71\u3011' }));
 });
+test('heading: 複数記号と組み込みキーワード', () => {
+  const multi = { headCfg: { lv1: '# §', lv2: '## ▼', lv1On: true, lv2On: true, builtin: { chapterNum: true, chapterWord: true, episodeNum: true, episodeWord: true } } };
+  assert.equal(headingLevel('§ 幕開け', multi), 1);
+  assert.equal(headingLevel('▼ その二', multi), 2);
+  assert.equal(headingLevel('第一章　はじまり', multi), 1);
+  assert.equal(headingLevel('第12話 続き', multi), 2);
+  assert.equal(headingLevel('プロローグ', multi), 1);
+  assert.equal(headingLevel('最終話', multi), 2);
+  // 記号 OFF でもキーワードは残る
+  const kwOnly = { headCfg: { lv1: '#', lv2: '##', lv1On: false, lv2On: false, builtin: { chapterNum: true, chapterWord: false, episodeNum: true, episodeWord: false } } };
+  assert.equal(headingLevel('# 章', kwOnly), 0);
+  assert.equal(headingLevel('第3章', kwOnly), 1);
+  assert.equal(headingLevel('プロローグ', kwOnly), 0);
+});
 test('heading: 行頭スペースのみ許容。他文字を挟むと本文。タイトルは切る', () => {
   const marks = { chapter: '#', episode: '##' };
   // 前に本文があると見出しにしない
