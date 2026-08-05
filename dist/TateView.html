@@ -4516,13 +4516,13 @@ function init() {
   bindThumbScrub();
   const wrap = $('pageWrap');
   wrap.addEventListener('wheel', onWheel, { passive: false });
-  // 未読状態のとき、原稿表示領域のクリックでファイル選択ダイアログを開く
-  wrap.addEventListener('click', (e) => {
+  // 未読状態のとき、原稿表示領域のクリックで FSA ファイル選択ダイアログを開く
+  wrap.addEventListener('click', async (e) => {
     if (!state.text && state.fileName === 'untitled.txt') {
       // 端ボタンは未使用（empty で非表示）だが念のため除外
       if (e.target.closest && e.target.closest('.page-edge')) return;
       e.preventDefault();
-      $('fileInput').click();
+      await openFileViaFsa();
     }
   });
   // 左右帯: 帯のどこを押してもページ送り（右綴じ 左=次 / 右=前）
@@ -4752,6 +4752,33 @@ async function reloadManuscript() {
   state.expectReloadPick = true;
   showToast('同じファイルを選び直してください', 2000);
   $('fileInput').click();
+}
+
+/**
+ * FSA (showOpenFilePicker) でファイルを開く。
+ * fallbackFile が渡され、FSA が未対応またはキャンセルされた場合は File から直接開く（handle なし）。
+ */
+async function openFileViaFsa(opts = {}) {
+  const fallbackFile = opts.fallbackFile || null;
+  const keepPosition = !!opts.keepPosition;
+
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }]
+      });
+      const file = await handle.getFile();
+      await openFile(file, handle, { keepPosition });
+      return;
+    } catch { /* キャンセル or エラー */ }
+  }
+
+  // FSA 未対応 → fallback File から開く（自動更新なし）
+  if (fallbackFile) {
+    await openFile(fallbackFile, null, { keepPosition });
+  } else {
+    $('fileInput').click();
+  }
 }
 
 /* ---------------- Rendering ---------------- */
@@ -6591,13 +6618,15 @@ function bindHeadCfgUI() {
 }
 
 function bindUI() {
-  $('fileInput').addEventListener('change', (e) => {
+  $('fileInput').addEventListener('change', async (e) => {
     const f = e.target.files[0];
     const reloadPick = state.expectReloadPick;
     state.expectReloadPick = false;
     // キャンセルや空選択で change が来ないこともある。来たら input を空にして同じファイル再選択を可能に
     e.target.value = '';
-    if (f) openFile(f, null, { keepPosition: reloadPick });
+    if (f) {
+      await openFileViaFsa({ fallbackFile: f, keepPosition: reloadPick });
+    }
   });
   $('openFsBtn').addEventListener('click', async () => {
     state.expectReloadPick = false; // 「開く」は初回扱い
